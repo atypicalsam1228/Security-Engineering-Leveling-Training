@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 26 of 29 in the recommended order |
-| Timed work | About 75 minutes (56 hands-on, 19 verify) |
+| Sequence | Module 29 of 32 in the recommended order |
+| Timed work | About 72 minutes (53 hands-on, 19 verify) |
 | Standalone start | `lab start sdr-5` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | Gitea, Tekton (OpenShift Pipelines), Grafana alerting (free, open source), Loki (free, open source), Mattermost, OpenShift Container Platform, oc, tkn, git, curl, jq, python3 |
@@ -329,35 +329,9 @@ If a blank is still there, the last line reads: FAIL  a FILL-IN marker is still 
 | test -s rules/pod-exec.json && echo ok \|\| echo EMPTY | Prints ok when the file has content and EMPTY when it does not. | A heredoc pasted twice can leave the file empty, and the check would then fail without saying why. |
 | python3 ci/check_rule.py rules/pod-exec.json | Applies your filters to the recorded events and compares the result with what you expected. It prints one line per case, then PASS or FAIL. | It is a quick stand-in for Loki, so you find a mistake in seconds. The real test in Loki comes in Steps 2 and 4. |
 
-#### 1d. Compare with the reference answer (only after you tried)
-
-You will now print the query of the reference answer, which lab start placed outside the repository, and then your own query.
-
-- Run this only after you have tried the block above and the check has passed or ten minutes have gone.
-- Different wording is fine if your check passed.
-
-```bash
-cd /workspace/sdr-5/detections
-jq -r .expr /workspace/sdr-5/reference/pod-exec.json
-jq -r .expr rules/pod-exec.json
-```
-
-**Expected output:**
-
-```
-Example only. The first line is the reference answer; yours may differ in wording or order.
-sum(count_over_time({log_type="audit"} | json | objectRef_resource="pods" | objectRef_subresource="exec" | verb="create" | user_username!~"system:.*" [5m]))
-<your query>
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| jq -r .expr /workspace/sdr-5/reference/pod-exec.json | Prints the query of the reference answer without the JSON quoting. | You compare your work with a known answer after you have tried, so you learn from the difference. |
-| jq -r .expr rules/pod-exec.json | Prints your own query the same way. | The two lines are easy to read side by side. |
-
 > **NOTE:** After lab reset sdr-5, delete /workspace/sdr-5/detections first (this deletes your local work) and run the first block again, because the rebuilt repository no longer matches your old copy. If you are stuck after ten minutes, ask your AI assistant to explain the error, or copy /workspace/sdr-5/reference/pod-exec.json into rules/.
 
-> **YOUR TURN:** Run the first block, read the pattern in the second, then write rules/pod-exec.json in the third until the check says PASS. Only then open the reference answer in the fourth.
+> **YOUR TURN:** Run the first block, read the pattern in the second, then write rules/pod-exec.json in the third until the check says PASS. Only then open the reference answer with cat /workspace/sdr-5/reference/pod-exec.json.
 
 > **CHECKPOINT:** The check prints PASS pod-exec looks right, and rules holds three .json files: pod-exec, priv-escalation and secret-read.
 

@@ -2,7 +2,7 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 1 of 29 in the recommended order |
+| Sequence | Module 1 of 32 in the recommended order |
 | Timed work | About 40 minutes |
 | Standalone start | `lab start eng-0` |
 | Combined start | Continue from the end state of the previous module |

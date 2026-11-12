@@ -9,7 +9,7 @@ Each module has at most five steps. You run it in your lab shell on your own clu
 ## Suggested order
 
 1. Start with ENG-0, then ENG-1. Every other module assumes ENG-0 and its earlier modules in the same dimension. The cloud and platform security and the architecture modules also use what ENG-1 teaches about how traffic moves.
-1. Then take one level across all seven dimensions, in this order: GRC-2, VM-2, SDR-2, CPS-2, AID-2, ARC-2, IAC-1; then GRC-3, VM-3, SDR-3, CPS-3, AID-3, ARC-3, IAC-2; then GRC-4, VM-4, SDR-4, CPS-4, AID-4, ARC-4, IAC-3; then GRC-5, VM-5, SDR-5, CPS-5, AID-5, ARC-5. This is the order the `lab modules` command lists.
+1. Then take one level across all seven dimensions, in this order: GRC-2, VM-2, SDR-2, CPS-2, AID-2, AI-1, ARC-2, IAC-1; then GRC-3, VM-3, SDR-3, CPS-3, AID-3, AI-3, ARC-3, IAC-2; then GRC-4, VM-4, SDR-4, CPS-4, AID-4, AI-2, ARC-4, IAC-3; then GRC-5, VM-5, SDR-5, CPS-5, AID-5, ARC-5. This is the order the `lab modules` command lists.
 1. Or take one dimension through its levels in order (infrastructure as code has three modules). Each level builds on the one before it in the same dimension and says what it assumes.
 
 ## Phase 1: Foundation
@@ -176,7 +176,6 @@ What you will do:
 - Triage the privilege-change alert (A-101)
 - Triage the failed sign-in burst (A-102)
 - Triage the shell opened in a pod (A-103)
-- Find the missing logs
 
 Tools and services: Loki and Grafana (free, open source), Mattermost (free, open source), OpenShift Container Platform, oc, curl, jq, python3
 
@@ -188,7 +187,6 @@ What you will do:
 
 - Separate the noise from the bursts
 - Follow the account and write the facts
-- Read the counts and choose a threshold
 - Apply the threshold to the rule and the panel
 - Run the review gate
 
@@ -284,19 +282,16 @@ Tools and services: OpenShift Container Platform (project request template), Kyv
 
 ## Phase 6: AI Development
 
-Why this order: you check AI-written scripts, put AI-assisted automation under review, build a constrained agent, then set the safe-adoption pattern. No model account or key is needed; a stand-in model gives scripted answers.
+Why this order: AID-2 is optional; you check AI-written scripts, put AI-assisted automation under review, build a constrained agent, then set the safe-adoption pattern. No model account or key is needed; a stand-in model gives scripted answers.
 
 ### AID-2 - Check AI-Written Scripts Before Running
 
-A regulated system must not change because someone, or something, wrote a command that looked helpful. This module teaches the habit of reading, searching and test-running an assistant's script before it touches the system, and stopping when it fails.
+This module is optional. Take it if you will run scripts an AI assistant wrote; AID-3 and AID-4 do not depend on it.
 
 What you will do:
 
-- Get the scripts and check their syntax
-- Search each script for risky lines
+- Get the scripts and search them for risky lines
 - See what the unsafe scripts would do, without letting them
-- Run the safe script in the sandbox project
-- Refuse and report the unsafe scripts
 
 Tools and services: bash, grep, oc, curl, jq, Stub model service (provided by the lab)
 
@@ -306,8 +301,7 @@ A regulated system may use a model (a program that writes text when you ask) to 
 
 What you will do:
 
-- Reach the model and clone the repository
-- Review a drafted shape check and write the test that catches its flaw
+- Set up, then review a drafted shape check and write the test that catches its flaw
 - Write the summary script and log every exchange
 - Push the branch, run the review gate and merge
 - Check a query the model drafted against known data
@@ -367,8 +361,7 @@ What you will do:
 - Confirm the starting condition
 - Write the test script and pass the review gate
 - Collect all three conditions, and test the gate meanwhile
-- Read back what each mode refused and recorded
-- Turn the table into a check on one requirement
+- Read back the table, then turn it into a check on one requirement
 
 Tools and services: OpenShift Container Platform, Kyverno (free, open source), oc, jq, python3
 
@@ -425,7 +418,7 @@ What you will do:
 
 - Get a working copy and write the namespace and quota
 - Add the default-deny policy, the role and the binding
-- Write the plan gate and run it on the good plan
+- Save the plan gate and run it on the good plan
 - Deliver the change through review, then apply the saved plan
 - Write the drift check and run it
 
@@ -439,8 +432,7 @@ What you will do:
 
 - Write the Ansible version of the baseline and lint it
 - Apply it and prove a second run changes nothing
-- Measure what each tool detects
-- Read the table, then close the gap
+- See what the tools list, then close the gap
 - Combine the checks into one gate
 
 Tools and services: Terraform (free), Ansible with the kubernetes.core collection and ansible-lint (free, open source), OpenShift Container Platform, oc, python3
@@ -453,30 +445,33 @@ Timed work is hands-on plus verify. Reading is not timed.
 | --- | --- | --- | --- |
 | ENG-0 | Terminal, Git and Your Lab | none | 40 |
 | ENG-1 | How Traffic Moves | none | 60 |
-| GRC-2 | Run Evidence Collection | CA-7, CM-6, SC-13 | 71 |
+| GRC-2 | Run Evidence Collection | CA-7, CM-6, SC-13 | 68 |
 | VM-2 | Scan and Hand Off | RA-5, SI-2 | 62 |
-| SDR-2 | Triage an Alert by Runbook | AU-6, IR-4, AU-5 | 60 |
-| CPS-2 | Apply a Hardening Baseline | CM-6, CM-7, SC-6 | 59 |
-| AID-2 | Check AI-Written Scripts Before Running | CM-3, IA-5(7), SA-11 | 52 |
+| SDR-2 | Triage an Alert by Runbook | AU-6, IR-4, AU-5 | 56 |
+| CPS-2 | Apply a Hardening Baseline | CM-6, CM-7, SC-6 | 61 |
+| AID-2 | Check AI-Written Scripts Before Running | CM-3, IA-5(7), SA-11 | 40 |
+| AI-1 | Put the Model Behind a Gateway | SC-7, AC-3, SC-5 | 55 |
 | ARC-2 | Trace the Security Stack | PL-8, CM-8, SC-7 | 56 |
-| IAC-1 | Run a Supplied Baseline as Code | CM-2, CM-3, CM-6 | 62 |
-| GRC-3 | Automate Evidence Collection | CA-7, CM-3, CM-6 | 73 |
-| VM-3 | Triage and Track Fixes | RA-5, SI-2, SA-11 | 68 |
-| SDR-3 | Investigate and Tune | SI-4, AU-6, IR-4 | 69 |
-| CPS-3 | Least-Privilege Roles and Baselines | AC-6, SC-7, CM-6 | 68 |
-| AID-3 | AI-Assisted Automation Under Review | SI-10, AU-12, CM-3, SA-11 | 72 |
-| ARC-3 | Choose an Admission Mode | SA-8, CM-7, AU-12 | 57 |
-| IAC-2 | Deliver a Baseline as Code with Terraform | CM-2, CM-3, CM-6 | 73 |
-| GRC-4 | Evidence in the Delivery Pipeline | SA-11, SI-7, CM-6 | 73 |
+| IAC-1 | Run a Supplied Baseline as Code | CM-2, CM-3, CM-6 | 56 |
+| GRC-3 | Automate Evidence Collection | CA-7, CM-3, CM-6 | 71 |
+| VM-3 | Triage and Track Fixes | RA-5, SI-2, SA-11 | 72 |
+| SDR-3 | Investigate and Tune | SI-4, AU-6, IR-4 | 68 |
+| CPS-3 | Least-Privilege Roles and Baselines | AC-6, SC-7, CM-6 | 66 |
+| AID-3 | AI-Assisted Automation Under Review | SI-10, AU-12, CM-3, SA-11 | 70 |
+| AI-3 | Watch the Model Gateway and Respond to Abuse | SI-4, AU-6, IR-4 | 55 |
+| ARC-3 | Choose an Admission Mode | SA-8, CM-7, AU-12 | 55 |
+| IAC-2 | Deliver a Baseline as Code with Terraform | CM-2, CM-3, CM-6 | 67 |
+| GRC-4 | Evidence in the Delivery Pipeline | SA-11, SI-7, CM-6 | 71 |
 | VM-4 | Prioritize by Context and Validate | RA-5, RA-7, CA-5, CM-3 | 67 |
 | SDR-4 | Build Detections and Pipelines | SI-4, SI-4(2), AU-6(3), IR-4(2) | 77 |
-| CPS-4 | Secure a Workload End to End | AC-6, IA-5, SC-28, SC-7 | 76 |
-| AID-4 | Build a Constrained Triage Agent | AC-6, CM-7, SI-10, AU-12 | 67 |
-| ARC-4 | Test Two Designs | SC-7, SC-8, SC-24, SA-8 | 52 |
-| IAC-3 | Terraform or Ansible: Choose by Evidence | CM-2, CM-3, CM-6 | 73 |
+| CPS-4 | Secure a Workload End to End | AC-6, IA-5, SC-28, SC-7 | 74 |
+| AID-4 | Build a Constrained Triage Agent | AC-6, CM-7, SI-10, AU-12 | 63 |
+| AI-2 | Check a Model File Before You Use It | SI-7, CM-14, SR-4 | 50 |
+| ARC-4 | Test Two Designs | SC-7, SC-8, SC-24, SA-8 | 51 |
+| IAC-3 | Terraform or Ansible: Choose by Evidence | CM-2, CM-3, CM-6 | 63 |
 | GRC-5 | Continuous Control Monitoring Design | CA-7, CM-6, CM-3 | 60 |
-| VM-5 | Risk-Based Gate in Delivery | RA-5, SI-2, SA-11 | 73 |
-| SDR-5 | Detection as Code | CM-3, CM-3(2), SI-4(2) | 75 |
-| CPS-5 | Guardrails Developers Inherit | CM-2, CM-7, SC-7, SC-6 | 76 |
+| VM-5 | Risk-Based Gate in Delivery | RA-5, SI-2, SA-11 | 70 |
+| SDR-5 | Detection as Code | CM-3, CM-3(2), SI-4(2) | 72 |
+| CPS-5 | Guardrails Developers Inherit | CM-2, CM-7, SC-7, SC-6 | 72 |
 | AID-5 | Safe Adoption Pattern for Agents | AC-6, SC-7, SI-4, SA-11 | 75 |
 | ARC-5 | Verify a Reference Architecture | PL-8, SC-7, CM-2, CM-8 | 62 |

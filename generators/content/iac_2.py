@@ -168,7 +168,7 @@ MODULE = {
     "controls": ["CM-2", "CM-3", "CM-6"],
     "mentions": ["AC-6", "SC-7"],
     "unit_values_ok": [],
-    "minutes": {"hands_on": 55, "verify": 18},
+    "minutes": {"hands_on": 49, "verify": 18},
     "tools": [
         "Terraform (with the hashicorp/kubernetes provider)",
         "Gitea (in-lab git server)",
@@ -192,9 +192,9 @@ MODULE = {
             "per_step": True,
             "rankdir": "LR",
             "step_notes": {
-                1: "You clone the repository from Gitea into your lab shell and write the first Terraform file, for the namespace and its resource quota. Terraform checks it. Nothing is sent to the cluster.",
+                1: "You clone the repository from Gitea into your lab shell and write the first Terraform file, for the namespace and its resource quota. Nothing is sent to the cluster.",
                 2: "You add the default-deny network policy and the binding, and you write the rule of the minimal role yourself. Terraform saves a plan for all five objects, you test your rule in it, and you turn it into a JSON file, plan.json.",
-                3: "You write the plan gate, a Python script that reads plan.json and fails on a wildcard, a cluster-admin binding, a missing network policy or quota, or an empty input. You run it on your own machine first.",
+                3: "You save the plan gate, a Python script that reads plan.json and fails on a wildcard, a cluster-admin binding, a missing network policy or quota, or an empty input. You run it on your own machine first.",
                 4: "You push the gate to main and protect main, then push a branch with the Terraform files and plan.json. A gate task in the build project fetches plan.json and the gate and posts a pass or fail on the commit. Gitea merges only on a pass, and then you apply the same saved plan to the cluster.",
                 5: "A drift check script in your lab shell asks Terraform whether the cluster still matches the files.",
             },
@@ -308,7 +308,7 @@ MODULE = {
             "plain": "Review proposed configuration-controlled changes and approve or disapprove them before they are implemented. Here a gate and a protected branch decide, and only an approved plan is applied.",
             "source": "NIST",
             "tool": "The plan gate script, a Tekton gate task, Gitea branch protection and a saved Terraform plan. Explained in section 2.2.",
-            "covered": "Section 3, Step 3: write the gate. Step 4: the gate task blocks or allows the merge and the saved plan is applied after it. Section 4, Test 2.",
+            "covered": "Section 3, Step 3: save and run the gate. Step 4: the gate task blocks or allows the merge and the saved plan is applied after it. Section 4, Test 2.",
             "cite": [
                 {"file": NIST, "quote": "Review proposed configuration-controlled changes to the system and approve or disapprove such changes with explicit consideration for security and privacy impact analyses"},
             ],
@@ -318,7 +318,7 @@ MODULE = {
             "plain": "Establish and implement configuration settings, and monitor and control changes to them. The requirement covered is item d: here a drift check watches for changes made outside the files.",
             "source": "NIST",
             "tool": "A drift check built on terraform plan -detailed-exitcode. Explained in section 2.3.",
-            "covered": "Section 3, Step 5: write the drift check. Section 4, Tests 1 and 3: it exits 0 on a match and 2 after a hand edit.",
+            "covered": "Section 3, Step 5: save the drift check. Section 4, Tests 1 and 3: it exits 0 on a match and 2 after a hand edit.",
             "cite": [
                 {"file": NIST, "quote": "Monitor and control changes to the configuration settings in accordance with organizational policies and procedures"},
                 {"file": FEDRAMP_MOD, "quote": "The service provider shall use the DoD STIGs to establish configuration settings"},
@@ -513,11 +513,11 @@ MODULE = {
         {
             "title": "Get a working copy and write the namespace and quota",
             "learn": "Cloning the repository and writing the namespace and quota as a Terraform file starts the baseline as a versioned document that Terraform can plan and apply.",
-            "takeaway": "terraform validate catches a typo before a plan does, and git records who made each change.",
+            "takeaway": "git records who made each change, and the repository is where the baseline starts.",
             "controls": [
                 {"id": "CM-2 Baseline Configuration", "how": "Cloning the repository and saving the namespace and quota as a Terraform file starts the baseline under configuration control. Nothing is in the cluster yet."},
             ],
-            "why": "The repository on Gitea (the git server in your lab) already holds the provider file, which names the plugin Terraform loads and the kubeconfig (the file that holds the cluster address and your login) it uses. You clone the repository, which copies it to your lab shell. You then load the provider, write the first two resources and ask Terraform to check them.",
+            "why": "The repository on Gitea (the git server in your lab) already holds the provider file, which names the plugin Terraform loads and the kubeconfig (the file that holds the cluster address and your login) it uses. You clone the repository, which copies it to your lab shell. You then load the provider and write the first two resources. Step 2 checks them with the rest.",
             "blocks": [
                 {
                     "code": L(
@@ -557,24 +557,9 @@ MODULE = {
                         ("hard = { ... }", "The limits: at most 10 pods, and totals for requested processor and memory.", "The lab picks these values. They are small on purpose, and an organization sets its own."),
                     ],
                 },
-                {
-                    "code": L(
-                        WORKDIR,
-                        "terraform fmt -check",
-                        "terraform validate",
-                    ),
-                    "label": "Check the file",
-                    "intro": "You will now check the file for mistakes. Nothing is sent to the cluster. The first plan comes in Step 2, when all five objects exist.",
-                    "expect": "Example only. Your output will differ.\nSuccess! The configuration is valid.",
-                    "lines": [
-                        ("cd /workspace/iac-2/iac-baseline", "Moves into the repository folder.", "Terraform reads the files in the folder you stand in."),
-                        ("terraform fmt -check", "Checks that the file is laid out the standard way. It prints nothing when it is.", "A fixed layout keeps later changes small and easy to read in a pull request."),
-                        ("terraform validate", "Checks the files for mistakes in names and arguments, without contacting the cluster.", "Catches a typo before a plan does, and tells you where it is."),
-                    ],
-                },
             ],
-            "action": "Run the three blocks in order.",
-            "checkpoint": "The check prints Success! The configuration is valid. If init or validate fails, copy the whole command and the error and ask your AI assistant.",
+            "action": "Run the two blocks in order.",
+            "checkpoint": "init prints Terraform has been successfully initialized, and the second block prints ok. If init fails, copy the whole command and the error and ask your AI assistant.",
         },
         {
             "title": "Add the default-deny policy, the role and the binding",
@@ -640,6 +625,8 @@ MODULE = {
                     "expect": "Example only. Your output will differ.\nSuccess! The configuration is valid.\n...\nPlan: 5 to add, 0 to change, 0 to destroy.\nSaved the plan to: good.tfplan\ncreate kubernetes_namespace_v1 lab\ncreate kubernetes_network_policy_v1 default_deny\ncreate kubernetes_resource_quota_v1 lab\ncreate kubernetes_role_binding_v1 reader\ncreate kubernetes_role_v1 reader\ntrue",
                     "lines": [
                         ("cd /workspace/iac-2/iac-baseline", "Moves into the repository folder.", "Terraform reads the files in the folder you stand in."),
+                        ("terraform fmt -check", "Checks that the file is laid out the standard way. It prints nothing when it is.", "A fixed layout keeps later changes small and easy to read in a pull request."),
+                        ("terraform validate", "Checks the files for mistakes in names and arguments, without contacting the cluster.", "Catches a typo before a plan does, and tells you where it is."),
                         ("terraform plan -out good.tfplan", "Saves a plan for the whole folder, now five objects.", "This file is the one you will apply in Step 4, after review. The name says it is the good one."),
                         ("terraform show -json good.tfplan > plan.json", "Writes the saved plan as JSON into the file plan.json.", "The gate reads this file, and so does the gate task in the cluster, which has no Terraform."),
                         ("jq -r ... plan.json", "Lists the action, type and name of each change.", "Five creates and nothing else is what a first plan of this baseline should show."),
@@ -662,13 +649,13 @@ MODULE = {
             "checkpoint": "The plan shows 5 to add, the list shows five creates, and the last line prints true: your rule allows get and list on pods and nothing else.",
         },
         {
-            "title": "Write the plan gate and run it on the good plan",
-            "learn": "Writing a gate that reads plan.json and fails on wildcards, cluster-admin bindings and missing security objects, and running it on the good plan and on an empty input, proves it passes what it should and fails what it should.",
+            "title": "Save the plan gate and run it on the good plan",
+            "learn": "Saving a gate that reads plan.json and fails on wildcards, cluster-admin bindings and missing security objects, and running it on the good plan and on an empty input, proves it passes what it should and fails what it should.",
             "takeaway": "A gate that has never failed proves nothing; run it on a bad input before you trust it.",
             "controls": [
                 {"id": "CM-3 Configuration Change Control", "how": "The gate reads the plan as data and fails on the rules you chose. Its pass or fail and exit code let a pipeline act on the result."},
             ],
-            "why": "Write the gate before anything is reviewed, so the review has a rule to apply. The script reads plan.json from standard input (the stream a program reads its data from) and prints one FAIL line for each broken rule. The script uses only what Python already has, so it runs in your lab shell and later in the cluster.",
+            "why": "Put the gate in place before anything is reviewed, so the review has a rule to apply. The script reads plan.json from standard input (the stream a program reads its data from) and prints one FAIL line for each broken rule. The script uses only what Python already has, so it runs in your lab shell and later in the cluster.",
             "blocks": [
                 {
                     "code": L(WORKDIR, HD("gate.py", GATE_CHECKS + "\n" + GATE_MAIN)),
@@ -841,21 +828,10 @@ MODULE = {
                         ("exit $code", "Ends with the same exit code that Terraform gave.", "A schedule or a person can act on the number without parsing text."),
                     ],
                 },
-                {
-                    "code": L(WORKDIR, "bash drift-check.sh; echo \"exit code: $?\""),
-                    "label": "Run the drift check on the clean baseline",
-                    "intro": "You will now run the check right after the apply, when the cluster and the files should match.",
-                    "expect": "Example only.\ndrift: none\nexit code: 0",
-                    "lines": [
-                        ("cd /workspace/iac-2/iac-baseline", "Moves into the repository folder.", "The script and the Terraform files are in this folder."),
-                        ("bash drift-check.sh", "Runs the script you saved.", "Runs the check the way you will run it after a change."),
-                        ("echo \"exit code: $?\"", "Prints the exit code of the script.", "Shows the answer as a number."),
-                    ],
-                },
             ],
-            "tip": "If this first run says drift: FOUND and you changed nothing, read drift.txt. The cluster may add labels or annotations of its own to a new namespace, and the ignore lists in providers.tf may not cover them. Copy the whole attribute name and the plan text from drift.txt and ask your AI assistant.",
-            "action": "Run the first block to make the script, then run the second block.",
-            "checkpoint": "The script prints drift: none and the exit code is 0.",
+            "tip": "If the first run, in Test 1, says drift: FOUND and you changed nothing, read drift.txt. The cluster may add labels or annotations of its own to a new namespace, and the ignore lists in providers.tf may not cover them. Copy the whole attribute name and the plan text from drift.txt and ask your AI assistant.",
+            "action": "Run the block to save the script. Test 1 runs it.",
+            "checkpoint": "The block prints ok, so drift-check.sh is saved. Test 1 runs it for the first time.",
         },
     ],
     "verify": [

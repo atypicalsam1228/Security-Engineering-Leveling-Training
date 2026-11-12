@@ -76,7 +76,7 @@ MODULE = {
     "hide_draft": True,
     "hover": True,
     "terms_at_end": True,
-    "minutes": {"hands_on": 52, "verify": 19},
+    "minutes": {"hands_on": 49, "verify": 19},
     "tools": [
         "OpenShift Container Platform",
         "OpenShift Pipelines (Tekton)",
@@ -195,8 +195,8 @@ MODULE = {
         "env": [],
     },
     "objectives": [
-        {"label": "Skill", "text": "Run a script that collects evidence from the cluster, read it field by field, write a check of your own, and deploy that check to the cluster."},
-        {"label": "Tools", "text": "`oc` reads the cluster, `jq` picks values out of the evidence, a Python collector script asks the questions, OpenShift Pipelines (Tekton) runs it without a person, and a config map carries your script onto the cluster."},
+        {"label": "Skill", "text": "Run a script that collects evidence from the cluster, read it field by field, and write a check of your own."},
+        {"label": "Tools", "text": "`oc` reads the cluster, `jq` picks values out of the evidence, a Python collector script asks the questions, OpenShift Pipelines (Tekton) runs it without a person, and a config map holds the script on the cluster."},
         {"label": "Security Function", "text": "Detects configuration drift. Dated evidence shows whether the FIPS setting, the Kyverno policies and the API audit profile still match the documents. A run that could not read everything is marked incomplete instead of passing."},
         {"label": "NIST CA-7 Continuous Monitoring", "text": "OpenShift Pipelines runs the collector without a person. Each run is one pass of monitoring, and its time and complete flag show how recent and how complete it was."},
         {"label": "NIST CM-6 Configuration Settings", "text": "The collector records the settings in force, the Kyverno policies and the API audit profile. Your own check counts pods that do not require a non-root user, a setting a secure configuration baseline can require."},
@@ -477,12 +477,11 @@ MODULE = {
                         "  -w name=script,config=evidence-collector --showlog\n"
                         "RUN=$(tkn pipelinerun describe --last -n build -o jsonpath='{.metadata.name}')\n"
                         "oc get pipelinerun \"$RUN\" -n build -o jsonpath='{.status.results[?(@.name==\"evidence\")].value}' | tee pipeline-evidence.json | jq .\n"
-                        "jq '{age_minutes: (((now - (.collected_at | fromdate)) / 60) | floor)}' pipeline-evidence.json\n"
                         "diff <(jq -S 'del(.collected_at)' facts.json) <(jq -S 'del(.collected_at)' pipeline-evidence.json) && echo same"
                     ),
                     "label": 'Start the pipeline, read its evidence and compare it with Step 2',
-                    "intro": 'You will now start one run as the service account, save its evidence in pipeline-evidence.json, check its age and compare it with facts.json from Step 2. The first run pulls two public images, so the cluster needs internet and it can take a minute.',
-                    "expect": 'Example only. Your time will differ.\n(the task log streams, then the run ends as Succeeded)\n{\n  "schema": "evidence-v1",\n  "collected_at": "2026-11-01T20:34:00Z",\n  "complete": true,\n  "checks": [ ...the same four checks as facts.json... ],\n  "errors": []\n}\n{\n  "age_minutes": 2\n}\nsame',
+                    "intro": 'You will now start one run as the service account, save its evidence in pipeline-evidence.json and compare it with facts.json from Step 2. The first run pulls two public images, so the cluster needs internet and it can take a minute.',
+                    "expect": 'Example only. Your time will differ.\n(the task log streams, then the run ends as Succeeded)\n{\n  "schema": "evidence-v1",\n  "collected_at": "2026-11-01T20:34:00Z",\n  "complete": true,\n  "checks": [ ...the same four checks as facts.json... ],\n  "errors": []\n}\nsame',
                     "lines": [
                         ("cd (the module folder)", "Moves into the module folder, where the evidence file will be saved.", "The saved file must land beside facts.json."),
                         ("tkn pipeline start collect-evidence", "Starts one run of the pipeline.", "Runs the collector the way a schedule would, with no person at the keyboard."),
@@ -493,12 +492,11 @@ MODULE = {
                         ("describe --last", "Finds the name of the run you just made.", "You need the run's name to read its result."),
                         ("status.results", "The values the run kept. The one named evidence is the collector's single line of JSON.", "The evidence is kept in the run's record, which is where the next step and later modules read it."),
                         ("tee pipeline-evidence.json", "Saves that line in a file as well as passing it on to jq.", "A saved copy lets you read the result again without running the pipeline a second time."),
-                        ("age_minutes", "Subtracts the collected_at time in the file from now and prints the age in minutes.", "Evidence is only usable while it is fresh; the lab limit is 24 hours."),
                         ("diff <(...) <(...) && echo same", "Compares the evidence from Step 2 with this evidence, leaving out collected_at, which always differs. It prints same when everything else matches and the differing lines when it does not.", "It answers the Step 2 versus Step 3 question with one word instead of reading two files by eye."),
                     ],
                 },
             ],
-            "checkpoint": "The pipeline run succeeds, its evidence has complete true, the age is a few minutes (well inside the lab limit of 24 hours), and the last command prints same. If it prints lines instead, the pipeline and your run disagree: read them before you go on.",
+            "checkpoint": "The pipeline run succeeds, its evidence has complete true, and the last command prints same. If it prints lines instead, the pipeline and your run disagree: read them before you go on.",
         },
         {
             "title": "Check one field against its source",
@@ -533,12 +531,12 @@ MODULE = {
         },
         {
             "title": "Write one check of your own",
-            "learn": 'Writing a check that counts deployments whose pods are not required to run as non-root, testing it two ways and storing it on the cluster shows how to extend the collector with a question your team asks.',
-            "takeaway": 'Deploy what you write. A check that stays on your laptop collects nothing for anyone else.',
+            "learn": 'Writing a check that counts deployments whose pods are not required to run as non-root, and testing it two ways shows how to extend the collector with a question your team asks.',
+            "takeaway": 'A check you cannot break on purpose is a check you cannot trust: prove it fails cleanly.',
             "controls": [
                 {"id": 'CM-6 Configuration Settings', "how": 'Your check records one more setting in force, whether pods require a non-root user, in the same form as the other checks.'},
             ],
-            "why": 'Each check in the collector is one small function that asks the cluster one question. You will write one more: deployments whose pods do not require a non-root user. You read the deployments (what the team declared) because OpenShift adds a non-root setting to running pods on its own. A container running as root gives an attacker more room if it is compromised. Look at the data, write the check, test it two ways (a right answer, and a broken question that must fail cleanly), then deploy it.',
+            "why": 'Each check in the collector is one small function that asks the cluster one question. You will write one more: deployments whose pods do not require a non-root user. You read the deployments (what the team declared) because OpenShift adds a non-root setting to running pods on its own. A container running as root gives an attacker more room if it is compromised. Look at the data, write the check, test it two ways (a right answer, and a broken question that must fail cleanly).',
             "blocks": [
                 {
                     "code": (
@@ -620,21 +618,6 @@ MODULE = {
                 },
                 {
                     "code": (
-                        "cd /workspace/grc-2\n"
-                        "oc create configmap my-check -n build --from-file=my_check.py --dry-run=client -o yaml | oc apply -f -\n"
-                        "oc get configmap my-check -n build -o jsonpath='{.data.my_check\\.py}'"
-                    ),
-                    "label": 'Deploy your check to the cluster and read it back',
-                    "intro": 'You will now store your function in the cluster as a config map, as the lab does with the collector. You then read the my-check config map back from the cluster. Storing a script this way is how it gets onto a cluster for a pipeline to use.',
-                    "expect": 'Example only.\nconfigmap/my-check created\ndef root_pods():\n    ...',
-                    "lines": [
-                        ("oc create configmap my-check ... --dry-run=client -o yaml", "Builds the config map from your file and prints it as YAML without sending it.", "Creating it this way lets you run the command again without an already exists error."),
-                        ("| oc apply -f -", "Sends that YAML to the cluster.", "This is the step that puts your script on the cluster."),
-                        ("oc get configmap my-check -n build -o jsonpath=...", "Prints the stored file back.", "Proves the cluster holds the same function you wrote."),
-                    ],
-                },
-                {
-                    "code": (
                         "oc get configmap evidence-reference -n build -o jsonpath='{.data.my_check\\.py}'"
                     ),
                     "label": 'Compare your line with the reference answer (after you tried)',
@@ -646,7 +629,7 @@ MODULE = {
                     ],
                 },
             ],
-            "checkpoint": "Your check lists the same deployment that the last command shows as unset, the broken copy shows complete false with root_pods error and no crash, and the config map my-check holds your function.",
+            "checkpoint": "Your check lists the same deployment that the last command shows as unset, the broken copy shows complete false with root_pods error and no crash; compare your line with the reference only after it works.",
         },
     ],
     "verify": [

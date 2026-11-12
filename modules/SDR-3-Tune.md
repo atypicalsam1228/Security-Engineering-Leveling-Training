@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 12 of 29 in the recommended order |
-| Timed work | About 69 minutes (50 hands-on, 19 verify) |
+| Sequence | Module 13 of 32 in the recommended order |
+| Timed work | About 68 minutes (49 hands-on, 19 verify) |
 | Standalone start | `lab start sdr-3` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | Loki LogQL (free, open source), Grafana alerting and dashboards (free, open source), OpenShift Container Platform, oc, curl, jq, python3 |
@@ -15,7 +15,7 @@
 - You investigate one seeded incident in Loki with your own searches and write six facts about it in findings.json.
 - You tune the noisy alert rule failed-login-burst and its dashboard panel in Grafana, then run a review gate that replays recorded events against the result.
 
-- **Skill:** Investigate a security incident in logs with your own searches and choose an alert threshold from the data. Apply it to a live alert rule and dashboard panel, and prove the result with a replay.
+- **Skill:** Investigate a security incident in logs with your own searches and set an alert threshold between the noise and the real bursts. Apply it to a live alert rule and dashboard panel, and prove the result with a replay.
 - **Tools:** Loki LogQL searches the stored sign-in and audit records. Grafana holds the alert rule and the dashboard panel you change. curl and jq call the Grafana API and read the answers. oc copies the review gate from the cluster, and Python runs the gate.
 - **Security Function:** Detects attacks and keeps detection usable. The tuned rule stops firing on harmless noise but still fires on both real bursts, and a replay of recorded events proves it.
 - **NIST SI-4 System Monitoring:** Loki searches and the Grafana alert rule failed-login-burst analyze the detected events, and you adjust the rule threshold and the dashboard panel to match what you found.
@@ -43,7 +43,7 @@ Each tool name links to its official overview. The table columns say how each to
 #### From one noisy rule to a tuned rule that a gate checks
 
 - You search the stored records in Loki (the log store) to understand the incident.
-- You read the counts to choose a threshold (the count above which a rule fires).
+- You set a threshold (the count above which a rule fires).
 - You change the alert rule (a saved search plus a limit) and the dashboard panel (one chart on a Grafana dashboard) in Grafana.
 - A review gate (an automated check that passes or fails the work) then replays recorded events (sends them through Loki again) against the result.
 - Each step below adds one part, drawn with thick lines.
@@ -68,7 +68,7 @@ How the lab is set up, and why:
 - **2. Alert rule (in Grafana):** the rule failed-login-burst, which fires when the failed sign-in count over 5 minutes is above its threshold.
 - **3. Dashboard panel (in Grafana):** the chart on dashboard sdr-auth-overview that draws the same count with a red threshold line.
 - **4. Findings file:** findings.json in lab shell, holding your six facts about the incident.
-- **5. Chosen threshold:** the number you pick from the counts and apply to the rule and to the panel.
+- **5. Chosen threshold:** the number 6, set once in a variable and applied to the rule and to the panel.
 - **6. Review gate:** review_gate.py, supplied by the lab, which checks your findings, the rule and the panel, and replays recorded events against the rule.
 - **7. Grafana (alerts and dashboards):** a free tool that runs alert rules and draws dashboards; the rule and the panel live in it.
 - **8. Project siem:** the section of the cluster where Loki and Grafana run.
@@ -146,9 +146,9 @@ The table shows what each threshold choice does and how the review gate judges i
 
 ### Design decisions
 
-#### Threshold read from the data, between noise and the weakest burst
+#### Threshold between the noise and the weakest burst
 
-- How: You list the five-minute failure count for every minute over six hours. You read the most common value as the noise level and the peaks as the bursts. You set the threshold between them with room on both sides.
+- How: In Step 1 you separate the steady noise from the two bursts. You set the threshold between the noise level and the weakest burst, with room on both sides, and the review gate checks the result.
 - Why: A threshold at or below the noise fires all day and one above the weakest real burst misses a probe.
 - Alternatives: The advantage of an adaptive baseline that adjusts by itself is that it follows changing noise without manual retuning. The drawback is that it is harder to explain and test, and it can learn a slow attack as normal.
 
@@ -272,7 +272,64 @@ Example only. Times and object names differ in your lab.
 | fromjson | Turns the stored line back into fields so jq can pick them. | Audit lines are stored as text. Turning them back into fields lets you print only the few that matter. |
 | [.stageTimestamp, .verb, ...] | Prints when, what kind of request, which kind of object and which object. | Time, action and object, in that order, read as a story of what the account touched. |
 
-#### 2b. Count the facts and write findings.json
+#### 2b. Your turn: write the secret-read count
+
+You will now write a starter search into the file secret-reads.logql.
+
+- It counts every request the account made, not only reads of secrets.
+- Run the block once so the file exists.
+- Then write the finished search yourself from the note below this block by running the same command again with your own line.
+
+```bash
+cd /workspace/sdr-3
+cat > secret-reads.logql <<'EOF'
+sum(count_over_time({lab_seed="sdr-3", seed_run="RUNID", log_type="audit"} | json | user_username="lab-user7" [6h]))
+EOF
+wc -l secret-reads.logql
+```
+
+**Expected output:**
+
+```
+Example only.
+1 secret-reads.logql
+```
+
+| Part | What it does | Why you run it |
+| --- | --- | --- |
+| cat > secret-reads.logql <<'EOF' ... EOF | Writes the line between the first line and EOF into the file. Running the command again with a different line replaces the file. | This is how you edit without an editor: write the whole file again. |
+| seed_run="RUNID" | A marker for the run number. The next blocks put the real number in place of RUNID. | The run number differs on every lab start, so the file holds a marker and not a fixed number. |
+| \| user_username="lab-user7" | Keeps the requests made by the taken-over account. This part is already right. | The impact you state is about this one account. |
+| [6h] | Counts over the last 6 hours, the same window as the other facts. | The incident began earlier than the default window of 1 hour. |
+
+#### 2c. Check your secret-read count
+
+You will now run your search against Loki.
+
+- Run the check again after every change to secret-reads.logql.
+
+```bash
+cd /workspace/sdr-3
+RUN=$(oc get configmap sdr-review -n siem -o jsonpath='{.data.anchor\.txt}')
+COUNT=$(curl -sG --cacert "$LOKI_CA_FILE" -u "$LOKI_USER:$LOKI_PASSWORD" "$LOKI_URL/loki/api/v1/query" --data-urlencode "query=$(sed "s/RUNID/$RUN/" secret-reads.logql)" | jq -r '.data.result[0].value[1]')
+echo "$COUNT" | grep -qx 4 && echo 'ok: 4 secret reads' || echo "not yet right: your search counted $COUNT"
+```
+
+**Expected output:**
+
+```
+Example only. When your search is right:
+ok: 4 secret reads
+(when it is not, the line "not yet right:" and the number your search counted)
+```
+
+| Part | What it does | Why you run it |
+| --- | --- | --- |
+| sed "s/RUNID/$RUN/" secret-reads.logql | Prints your file with the run number in place of RUNID. | Loki receives a search that names this lab start, so old records stay out of the count. |
+| jq -r '.data.result[0].value[1]' | Picks the one number out of Loki's answer. | The check needs the count and nothing else. |
+| echo "$COUNT" \| grep -qx 4 && echo ... | Prints ok when the count is 4 and the line not yet right: when it is not. | The exercise records hold exactly 4 reads of secrets by the account, so any other number means the search keeps too much or too little. |
+
+#### 2d. Count the facts and write findings.json
 
 You will now count the failures, find the first success and count the secret reads, then save six facts in findings.json.
 
@@ -282,7 +339,7 @@ START=$(date -d '6 hours ago' +%s)
 RUN=$(oc get configmap sdr-review -n siem -o jsonpath='{.data.anchor\.txt}')
 FAILED=$(curl -sG --cacert "$LOKI_CA_FILE" -u "$LOKI_USER:$LOKI_PASSWORD" "$LOKI_URL/loki/api/v1/query" --data-urlencode 'query=sum(count_over_time({lab_seed="sdr-3", seed_run="'"$RUN"'", log_type="application", kubernetes_namespace_name="keycloak"} |= "LOGIN_ERROR" |= "lab-user7" [6h]))' | jq -r '.data.result[0].value[1]')
 SUCCESS=$(curl -sG --cacert "$LOKI_CA_FILE" -u "$LOKI_USER:$LOKI_PASSWORD" "$LOKI_URL/loki/api/v1/query_range" --data-urlencode 'query={lab_seed="sdr-3", seed_run="'"$RUN"'", log_type="application", kubernetes_namespace_name="keycloak"} |= `type="LOGIN"` |= "lab-user7"' --data-urlencode "start=$START" --data-urlencode 'limit=1' --data-urlencode 'direction=forward' | jq -r '.data.result[0].values[0][0] | tonumber / 1000000000 | floor | todate')
-SECRETS=$(curl -sG --cacert "$LOKI_CA_FILE" -u "$LOKI_USER:$LOKI_PASSWORD" "$LOKI_URL/loki/api/v1/query" --data-urlencode 'query=sum(count_over_time({lab_seed="sdr-3", seed_run="'"$RUN"'", log_type="audit"} | json | user_username="lab-user7" | objectRef_resource="secrets" | verb="get" [6h]))' | jq -r '.data.result[0].value[1]')
+SECRETS=$(curl -sG --cacert "$LOKI_CA_FILE" -u "$LOKI_USER:$LOKI_PASSWORD" "$LOKI_URL/loki/api/v1/query" --data-urlencode "query=$(sed "s/RUNID/$RUN/" secret-reads.logql)" | jq -r '.data.result[0].value[1]')
 jq -n --arg account lab-user7 --arg ip 203.0.113.50 --argjson failed "$FAILED" --arg success "$SUCCESS" --argjson secrets "$SECRETS" --arg other lab-admin1 '{account:$account, source_ip:$ip, failed_attempts:$failed, first_success_utc:$success, secrets_read:$secrets, other_account_targeted:$other}' > findings.json
 cat findings.json
 ```
@@ -306,15 +363,17 @@ Example only. The success time is yours to read.
 | cd /workspace/sdr-3, START=... and RUN=... | Moves into the module folder and sets the start time and the run number again. | A block must run on its own, even in a new lab shell, so it does not rely on the block before it. |
 | FAILED=$(...) | Counts the failed sign-ins that name the account. Expect 12. | The failure count is the first fact for findings.json. The gate recomputes it, so it must come from the records and not from memory. |
 | SUCCESS=$(...) | Finds the first sign-in with type LOGIN for the account and turns its time into a readable time in UTC (the world's standard time). direction=forward makes Loki return the oldest match first; the default is newest first. | The first success after the failures is the moment the account was taken over, so its time belongs in the findings. |
-| SECRETS=$(...) | Counts requests of kind get on secrets by the account. A secret is a stored password or key. | How many secrets the account read is the impact of the takeover, the fact a report must neither overstate nor understate. |
+| SECRETS=$(...) | Runs the search you wrote in secret-reads.logql, with the run number put in place of RUNID. It counts requests of kind get on secrets by the account. A secret is a stored password or key. | How many secrets the account read is the impact of the takeover, the fact a report must neither overstate nor understate. |
 | jq -n --arg ... --argjson ... | Builds the findings object. --arg passes text, --argjson passes a number. | Building the file with jq puts your values into valid JSON without typing quotes by hand, so the gate can read it. |
-| > findings.json | Writes the object to a file. The gate reads this file. | The review gate in Step 5 reads this exact file name, so it has to be saved here. |
+| > findings.json | Writes the object to a file. The gate reads this file. | The review gate in Step 4 reads this exact file name, so it has to be saved here. |
 
-![Output from a real lab run: Count the facts and write findings.json](img/SDR-3-shot-2b.png)
+![Output from a real lab run: Count the facts and write findings.json](img/SDR-3-shot-2d.png)
+
+> **NOTE:** Spec for the search: it must count the requests of kind get on secrets made by the account lab-user7 in the last 6 hours, and nothing else. Keep the three parts that are already right (the run marker, the account and the 6 hours), and add two filters, one line each, starting with the pipe character: the kind of object (objectRef_resource) must be secrets and the request kind (verb) must be get. Reference after you have tried, to put between the account filter and [6h]: | objectRef_resource="secrets" | verb="get"
 
 > **SECURITY:** The findings name an account and an address, so keep the file private. Never paste secret values you might find into it.
 
-> **YOUR TURN:** Run both blocks. In the first, read the order of events: what the account touched after it signed in. In the second, check each value is not empty before you move on.
+> **YOUR TURN:** Run the first block and read the order of events: what the account touched after it signed in. Run the starter block, then write your own version of secret-reads.logql and run the check until it says ok. Then run the last block and check each value is not empty before you move on.
 
 > **CHECKPOINT:** findings.json holds six values: the account, the address, 12 failures, a success time, 4 secret reads, and the other account that was probed.
 
@@ -325,90 +384,22 @@ Example only. The success time is yours to read.
 - **AU-6:** The control asks for audit records to be reviewed for unusual activity and its potential impact. Here you list what the taken-over account did in the audit records and count its secret reads. The count goes into findings.json as the stated impact.
 - **IR-4:** The control asks for results that are comparable and predictable. You turn your own searches into six facts in findings.json, each one something a script can recompute. Another analyst repeating your searches should reach the same values.
 
-### Step 3. Read the counts and choose a threshold (SI-4 System Monitoring)
-
-**Learning point: Reading the five-minute count for every minute shows the noise level and the height of both bursts, which gives you the range a threshold can sit in.**
-
-- The rule counts failures in a 5-minute window, so you list that count for every minute over 6 hours.
-- The most common value in that list is the noise level.
-- Minutes whose count is above the noise level are the bursts.
-
-What this step adds (thick lines and outlines are new):
-
-![From one noisy rule to a tuned rule that a gate checks, after step 3](img/SDR-3-step-3.png)
-
-- You read the five-minute counts over six hours from Loki and pick a threshold between the noise and the weakest real burst.
-
-#### 3a. Read the five-minute count for every minute
-
-You will now save the five-minute failure count for each minute of the last 6 hours, then see how often each value occurs and when it goes above 4.
-
-```bash
-cd /workspace/sdr-3
-START=$(date -d '6 hours ago' +%s)
-RUN=$(oc get configmap sdr-review -n siem -o jsonpath='{.data.anchor\.txt}')
-NOW=$(date +%s)
-Q='sum(count_over_time({lab_seed="sdr-3", seed_run="RUN_ID", log_type="application", kubernetes_namespace_name="keycloak"} |= "LOGIN_ERROR" [5m]))'
-Q=${Q/RUN_ID/$RUN}
-curl -sG --cacert "$LOKI_CA_FILE" -u "$LOKI_USER:$LOKI_PASSWORD" "$LOKI_URL/loki/api/v1/query_range" --data-urlencode "query=$Q" --data-urlencode "start=$START" --data-urlencode "end=$NOW" --data-urlencode 'step=60' > counts.json
-jq -r '.data.result[0].values[] | .[1]' counts.json | sort -n | uniq -c
-jq -r '.data.result[0].values[] | select((.[1] | tonumber) > 4) | [(.[0] | todate), .[1]] | @tsv' counts.json
-```
-
-**Expected output:**
-
-```
-Example only. Counts and times differ in your lab.
-<minutes> <value>
-<minutes> 4
-<minutes> <value>
-(the value with the most minutes is the noise level)
-<time>	<a value above 4>
-(one group of times peaks near 9 and one near 16)
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| cd /workspace/sdr-3 | Moves into the module folder, because counts.json is saved there. | A block must run on its own, so it starts by going to the folder. |
-| RUN=$(oc get configmap sdr-review ...) | Reads the number of this lab start from the ConfigMap sdr-review. Every exercise record carries it as the label seed_run. | Records from an earlier lab start may still be stored. Adding seed_run to each search keeps their old lines out of your counts. |
-| START=$(date -d '6 hours ago' +%s) | Sets the start of the range again, so the block also works if you opened a new lab shell since Step 2. | A fresh lab shell would not have this variable, so you set it again and the block runs on its own. |
-| NOW=$(date +%s) | Stores the current time as the end of the range. | A range search needs an end as well as a start, and this fixes the end at the moment you run it. |
-| sum(count_over_time(... [5m])) | The same count the rule makes: failed sign-ins in the last 5 minutes. | Your threshold applies to exactly this count, so you must look at the same number the rule looks at. |
-| step=60 | Asks for one value per minute. | One value per minute matches how often the rule is checked, so you see every value the rule would see. |
-| > counts.json | Saves the answer so two commands can read it. | Two commands below read the same answer, so one search is enough. |
-| sort -n \| uniq -c | Counts how many minutes had each value. The biggest group is the noise level. | The most common value is the noise level, and a threshold must sit above it. |
-| select((.[1] \| tonumber) > 4) | Lists only the minutes whose count was above 4, with their times. | These minutes are the bursts, with their times, so you can find the peak of each and choose a value below the smaller one. |
-
-![Output from a real lab run: Read the five-minute count for every minute](img/SDR-3-shot-3a.png)
-
-> **NOTE:** The rule fires when the count is greater than the threshold, so choose a value above the noise level and below the weakest burst, with room on both sides. A value too close to the noise level can fire on a window edge. You set your chosen value as THRESHOLD in Step 4.
-
-> **YOUR TURN:** Run the block. Read the noise level, the peak of the smaller burst and the peak of the larger burst.
-
-> **CHECKPOINT:** The most common value is 4, and two groups of minutes are above it, one peaking near 9 and one near 16 (a count one or two lower or higher is fine).
-
-> **TAKEAWAY:** Choose a threshold from the data, between the noise and the weakest real burst.
-
-**How this meets the control**
-
-- **SI-4:** The control asks that detected events be analyzed and that monitoring be adjusted. Here you read the five-minute count for every minute, find the noise level and the two peaks, and choose a threshold between them. The chosen value is the adjustment you apply in Step 4.
-
-### Step 4. Apply the threshold to the rule and the panel (SI-4 System Monitoring)
+### Step 3. Apply the threshold to the rule and the panel (SI-4 System Monitoring)
 
 **Learning point: Sending your threshold to the rule and the panel through the Grafana API changes the live objects, so the rule stops firing on noise and the panel shows the same number.**
 
 - The alert rule and the dashboard panel both carry the threshold, and the two must agree.
 - A panel that draws its line at the old value misleads whoever reads it.
 - For each one you fetch the object from the Grafana API, change only the threshold with jq, and send it back.
-- The review gate in Step 5 checks that the rule and the panel match.
+- The review gate in Step 4 checks that the rule and the panel match.
 
 What this step adds (thick lines and outlines are new):
 
-![From one noisy rule to a tuned rule that a gate checks, after step 4](img/SDR-3-step-4.png)
+![From one noisy rule to a tuned rule that a gate checks, after step 3](img/SDR-3-step-3.png)
 
 - You send the new threshold to the alert rule and to the dashboard panel in Grafana, so both show the same number.
 
-#### 4a. Set the threshold on the alert rule
+#### 3a. Set the threshold on the alert rule
 
 You will now look up the rule failed-login-burst, change only its threshold in a saved copy, and send the copy back to Grafana.
 
@@ -433,15 +424,15 @@ Example only. The time will differ.
 | Part | What it does | Why you run it |
 | --- | --- | --- |
 | cd /workspace/sdr-3 | Moves into the module folder, because rule.json is saved there. | A block must run on its own, so it starts by going to the folder. |
-| THRESHOLD=6 | Your chosen value. Change it if your reading of Step 3 says otherwise. | One variable feeds both the rule and the panel in this step, so they cannot end up with different numbers. |
+| THRESHOLD=6 | The threshold. The lab's noise is 4 a minute and its smaller burst peaks near 9, so 6 sits between them with room on both sides. The gate in Step 4 proves it, and Test 2 shows what 2 and 12 do. | One variable feeds both the rule and the panel in this step, so they cannot end up with different numbers. |
 | RULE_UID=$(...) | Finds the identifier of the rule named failed-login-burst. | The API addresses a rule by its identifier and not by its title, so you look the identifier up by title first. |
 | jq --argjson thr ... .params=[$thr] | Replaces the number the rule compares against, leaving everything else as it was. | Only the threshold should change. Everything else in the rule must stay as the lab made it. |
 | -X PUT ... -d @rule.json | Sends the whole changed rule back. X-Disable-Provenance lets the API change a rule that was made through the API. | The whole changed rule goes back, and that is what makes the new threshold live. |
 | jq '{title, updated}' | Prints the rule name and update time to show the change was accepted. | A new update time is the proof that Grafana accepted the change, not just that the command ran. |
 
-![The Grafana alert rules page showing the failed-login-burst rule in the siem-detect folder](img/SDR-3-shot-4a-grafana.png)
+![The Grafana alert rules page showing the failed-login-burst rule in the siem-detect folder](img/SDR-3-shot-3a-grafana.png)
 
-#### 4b. Set the same threshold on the dashboard panel
+#### 3b. Set the same threshold on the dashboard panel
 
 You will now fetch the dashboard, move its red threshold line to the same value, and save it.
 
@@ -473,7 +464,7 @@ Example only. The version number will differ.
 | api/dashboards/db | Saves the dashboard. | Saving is what makes the new red line appear on the dashboard. |
 | the last curl ... .value | Reads the red line back from Grafana and prints its value. | You check the panel with a command, so no web login is needed. It must equal the rule threshold. |
 
-![The Grafana panel Failed sign-ins per 5 minutes with a red threshold line at 6 (the plotted counts in this capture come from a larger test run and are higher than the counts you read in Step 3)](img/SDR-3-shot-4b-grafana.png)
+![The Grafana panel Failed sign-ins per 5 minutes with a red threshold line at 6 (the plotted counts in this capture come from a larger test run and are higher than the counts you read in Step 3)](img/SDR-3-shot-3b-grafana.png)
 
 > **YOUR TURN:** Run both blocks. The last line the second block prints is the red line of the panel; it must equal your threshold.
 
@@ -485,7 +476,7 @@ Example only. The version number will differ.
 
 - **SI-4:** The control asks that the monitoring be adjusted so it stays useful. Here you send your threshold to the live alert rule and to the dashboard panel through the Grafana API. The rule now ignores the noise, and the panel shows the same number.
 
-### Step 5. Run the review gate (SI-4 System Monitoring, IR-4 Incident Handling)
+### Step 4. Run the review gate (SI-4 System Monitoring, IR-4 Incident Handling)
 
 **Learning point: Running the review gate replays recorded events against your tuned rule and checks your findings, so a pass is evidence and not opinion.**
 
@@ -496,11 +487,11 @@ Example only. The version number will differ.
 
 What this step adds (thick lines and outlines are new):
 
-![From one noisy rule to a tuned rule that a gate checks, after step 5](img/SDR-3-step-5.png)
+![From one noisy rule to a tuned rule that a gate checks, after step 4](img/SDR-3-step-4.png)
 
 - The review gate in lab shell replays recorded events into Loki, reads the rule and the panel from Grafana, and checks your findings.json.
 
-#### 5a. Fetch and run the review gate
+#### 4a. Fetch and run the review gate
 
 You will now copy the review gate from the cluster and run it against your findings, the rule and the panel.
 
@@ -527,7 +518,7 @@ GATE PASSED
 | oc extract configmap/sdr-review ... > /dev/null | Copies the gate and its helper files into the current folder, and hides the list of file names it would print. Your findings.json is not overwritten. | The lab supplies the gate and stores it in the cluster. Copying it into lab shell lets you run it. |
 | python3 review_gate.py | Runs the gate. It exits with code 1 when any line fails. | The gate is the proof that your findings, rule and panel are acceptable. When one is not, it tells you what to fix. |
 
-![Output from a real lab run: Fetch and run the review gate](img/SDR-3-shot-5a.png)
+![Output from a real lab run: Fetch and run the review gate](img/SDR-3-shot-4a.png)
 
 > **YOUR TURN:** Run the block. If a line says FAIL, read the words after it, fix that part, and run the gate again.
 
@@ -544,7 +535,7 @@ GATE PASSED
 
 ### Test 1 (positive). The live rule has the tuned threshold and evaluates without error (SI-4 System Monitoring)
 
-- The gate in Step 5 checked the panel against the rule, but it tests the rule's query in Loki, not the rule inside Grafana.
+- The gate in Step 4 checked the panel against the rule, but it tests the rule's query in Loki, not the rule inside Grafana.
 - Read the live rule back to see the tuned threshold, then ask Grafana for the health of the rule after its last evaluation, because a rule that saved but fails when it runs would never alert.
 - Health can read unknown until the first evaluation after your change; if it does, run the last command again after a minute.
 
@@ -617,7 +608,7 @@ GATE PASSED
 | Part | What it does | Why you run it |
 | --- | --- | --- |
 | cd /workspace/sdr-3 | Moves into the module folder, where the gate was copied. | The gate runs from there. |
-| for THRESHOLD in 2 12 6; do ... done | Repeats the block for three values: too low, too high, and your working value. | Each value is sent to the live rule with the same call you used in Step 4. |
+| for THRESHOLD in 2 12 6; do ... done | Repeats the block for three values: too low, too high, and your working value. | Each value is sent to the live rule with the same call you used in Step 3. |
 | python3 review_gate.py \| grep -E 'noise\|real burst\|GATE' | Runs the gate and keeps only the lines that matter. | You see the verdict for each value. |
 | threshold 2 ... FAIL noise | At 2 the rule fires all day, so the noise line fails. | A rule that is too sensitive buries real alerts. |
 | threshold 12 ... FAIL real burst 1 | At 12 the rule is quiet but misses the smaller real burst. | Quieting the rule too far loses a real attack. |
@@ -637,9 +628,9 @@ GATE PASSED
 
 | Control | What it requires, in plain words | Tool or service | Where this module covers it |
 | --- | --- | --- | --- |
-| SI-4 System Monitoring | Analyze what monitoring detects, and adjust the monitoring when risk changes. | Loki searches, the Grafana alert rule failed-login-burst and its dashboard panel. Explained in sections 2.1 and 2.2. | Section 3, Steps 1 to 4: you analyze the detected events and adjust the rule that detects them. Section 3, Step 5, and Section 4, Tests 1 and 2: the replay shows the rule still fires on real events. |
+| SI-4 System Monitoring | Analyze what monitoring detects, and adjust the monitoring when risk changes. | Loki searches, the Grafana alert rule failed-login-burst and its dashboard panel. Explained in sections 2.1 and 2.2. | Section 3, Steps 1 to 3: you analyze the detected events and adjust the rule that detects them. Section 3, Step 4, and Section 4, Tests 1 and 2: the replay shows the rule still fires on real events. |
 | AU-6 Audit Record Review, Analysis, and Reporting | Review audit records for unusual activity and the potential impact of that activity. | Your own LogQL searches over the audit records in Loki, and the file findings.json. Explained in section 2.3. | Section 3, Step 2: you follow one account through the audit records and state its impact in findings.json. |
-| IR-4 Incident Handling | Handle an incident through detection and analysis, and keep the results comparable and predictable. | The file findings.json and the review gate (review_gate.py). Explained in section 2.2. | Section 3, Steps 1 and 2: the detection and analysis phase. Section 3, Step 5: the review gate makes the result checkable. |
+| IR-4 Incident Handling | Handle an incident through detection and analysis, and keep the results comparable and predictable. | The file findings.json and the review gate (review_gate.py). Explained in section 2.2. | Section 3, Steps 1 and 2: the detection and analysis phase. Section 3, Step 4: the review gate makes the result checkable. |
 
 ### What each control is for
 
@@ -681,7 +672,7 @@ Each table below says what the control is trying to prevent and how this module'
 
 - The investigation searches are plain LogQL and the tuning is plain Grafana HTTP API calls with curl and jq, so they run against any Loki and Grafana that hold the same records.
 - Change these lab values first: LOKI_URL, LOKI_CA_FILE, the Loki credentials, GRAFANA_URL and the Grafana credentials, plus the rule title failed-login-burst, the dashboard uid sdr-auth-overview and the namespace names.
-- The threshold band comes from the seeded records. On a real system read your own counts in Step 3 and choose a value between your noise and your weakest real burst.
+- The threshold band comes from the seeded records. On a real system read your own counts, as in Step 1, and choose a value between your noise and your weakest real burst.
 - The oc extract of the sdr-review ConfigMap and the Keycloak and audit label names are cluster-specific. The Grafana API paths can differ by Grafana version, so check them on yours.
 
 The table shows what changes on each platform:
@@ -750,6 +741,7 @@ Each term is also explained the first time it appears. In Word, hover over an un
 | Role | A list of actions a user or program may take on named kinds of objects. |
 | Rule | A written condition that a tool checks. |
 | Secret | A stored password or key held in the cluster. Reading one is a sensitive act. |
+| sed | A command that edits text as it passes through, often to replace one string with another. |
 | Severity | How serious a finding is, such as low, medium, high or critical. |
 | Signal | A count that rises because something real is happening, such as a small burst of probing before a larger attack. |
 | Signature | A value made with a private key that shows who made something and that it was not changed. |
@@ -757,7 +749,6 @@ Each term is also explained the first time it appears. In Word, hover over an un
 | Threshold | The count above which a rule fires. Here: the rule fires when the number of failures in 5 minutes is greater than the threshold. |
 | TSV | Tab-separated values: a table written as text, with a tab between columns. |
 | UID | The number that identifies the user a process runs as. |
-| uniq | A command that removes repeated neighbouring lines. |
 | URL | A web address, such as https://example.com/page. |
 | UTC | The world's standard time, so a time means the same on every machine. |
 | Variable | A named value you or the lab set, such as THRESHOLD. A dollar sign before the name means use its value. |

@@ -64,7 +64,7 @@ spec:
 
 CRON_TAIL_SKELETON = '''              env:
                 - name: EVIDENCE_DIR
-                  value: # WRITE the one folder the collector may write to
+                  value: /evidence
                 - name: PATH
                   value: /oc-bin:/opt/app-root/bin:/usr/bin:/bin
               command: ["/bin/sh", "-c"]
@@ -72,10 +72,10 @@ CRON_TAIL_SKELETON = '''              env:
                 - # WRITE one shell line: fetch the collector from main, then run it
               volumeMounts:
                 - name: evidence
-                  mountPath: # WRITE where the evidence volume appears
+                  mountPath: /evidence
                 - name: oc-bin
                   mountPath: /oc-bin
-          # WRITE the service account line here, indented like "containers:" above
+          serviceAccountName: evidence-runner
 '''
 
 HEREDOC_B = "cat > collect_b.py <<'EOF'\n" + COLLECT_B + "EOF\ntest -s collect_b.py && echo ok || echo EMPTY\ncat collect_a.py collect_b.py > evidence-scripts/collect_evidence.py\n"
@@ -96,7 +96,7 @@ MODULE = {
         "The gate runs as a Tekton pipeline that a Gitea push webhook starts through a Tekton Triggers EventListener and that posts a commit status named evidence-review-gate. "
         "The Gitea fields branch protection `enable_status_check`, `status_check_contexts` and `block_admin_merge_override`, the combined status endpoint `commits/{ref}/status`, the status post `statuses/{sha}`, the raw file endpoint with `?ref=` and the merge refusal code 405 for a failed required check were checked against the Gitea main source on 2026-10-29. The Gitea version the lab runs is not pinned, so run `curl -s \"$GITEA_URL/api/v1/version\"` and re-check if it is old. The Tekton Triggers v1beta1 EventListener with an inline binding that has a value matches the Triggers documentation; the push payload field `after` is confirmed on a live Gitea only. "
         "The lab must also allow Gitea to call a private cluster address from a webhook, which Gitea blocks by default. The collector reads the FIPS flag the same way as GRC-2 and carries the same assumption about `spec.fips`. "
-        "Step 5 is a writing exercise: the learner writes the end of the CronJob (identity, evidence folder, fetch-and-run command) against a table, and the supplied check-cronjob.py (it needs PyYAML, which the lab image has) holds the file to the spec. The joined reference answer was checked here to parse and to equal the earlier full CronJob. The check script, the exercise and the `oc auth can-i --as` impersonation lines have not run on a live cluster, and the supplied collect_a.py is now placed by the start state (its start-state kit folder) instead of being pasted."
+        "Step 5 is a writing exercise: the learner writes one line of the end of the CronJob (the fetch-and-run command) against a table, and the identity and evidence folder are supplied and explained, and the supplied check-cronjob.py (it needs PyYAML, which the lab image has) holds the file to the spec. The joined reference answer was checked here to parse and to equal the earlier full CronJob. The check script, the exercise and the `oc auth can-i --as` impersonation lines have not run on a live cluster, and the supplied collect_a.py is now placed by the start state (its start-state kit folder) instead of being pasted."
     ),
     "controls": ["CA-7", "CM-3", "CM-6"],
     "mentions": ["CM-7", "CM-8", "SI-7"],
@@ -105,7 +105,7 @@ MODULE = {
     "hide_draft": True,
     "hover": True,
     "terms_at_end": True,
-    "minutes": {"hands_on": 49, "verify": 24},
+    "minutes": {"hands_on": 47, "verify": 24},
     "tools": [
         "OpenShift Container Platform",
         "OpenShift Pipelines (Tekton)",
@@ -597,12 +597,12 @@ MODULE = {
         },
         {
             "title": "Write the CronJob that runs it on a schedule",
-            "learn": "Writing and deploying the CronJob makes the collector run without a person and fetch only from main, so the schedule inherits the review.",
+            "learn": "Writing the fetch line and deploying the CronJob makes the collector run without a person and fetch only from main, so the schedule inherits the review.",
             "takeaway": "A collector that only runs what main holds cannot skip the gate.",
             "controls": [
-                {"id": 'CA-7 Continuous Monitoring', "how": 'You write the identity, the evidence folder and the fetch-and-run command. Each run writes a time-stamped evidence file to the volume.'},
+                {"id": 'CA-7 Continuous Monitoring', "how": 'You write the fetch-and-run command; the identity and the evidence folder are supplied. Each run writes a time-stamped evidence file to the volume.'},
             ],
-            "why": "The CronJob fetches the collector from main on every run, so only reviewed code can reach the schedule. The job's only writable location is the evidence volume. You write the identity, the evidence folder and the fetch-and-run command.",
+            "why": "The CronJob fetches the collector from main on every run, so only reviewed code can reach the schedule. The job's only writable location is the evidence volume. You write the fetch-and-run command; the identity and the evidence folder are supplied and explained.",
             "blocks": [
                 {
                     "code": WORK + HEREDOC_CRON_HEAD,
@@ -621,15 +621,15 @@ MODULE = {
                 },
                 {
                     "code": WORK + HEREDOC_CRON_TAIL,
-                    "label": 'Write the end of the CronJob',
-                    "intro": 'You will now write the rest of the file as cronjob-tail.yaml. Replace each WRITE line with your answer, using the table below. Line up the spaces with the lines around it, because YAML reads the spaces as structure. If you paste the block unchanged, the check in 5c fails on purpose. The block prints ok when the file has content; if EMPTY shows, type it again.',
+                    "label": 'Finish the end of the CronJob',
+                    "intro": 'You will now save the rest of the file as cronjob-tail.yaml. Three of its parts are filled in for you and explained in the table: the evidence folder, the mount path and the identity. One line is yours to write: replace the WRITE line with your answer, using the table below. Line up the spaces with the lines around it, because YAML reads the spaces as structure. If you paste the block unchanged, the check in 5c fails on purpose. The block prints ok when the file has content; if EMPTY shows, type it again.',
                     "expect": 'Example only.\nok',
                     "lines": [
-                        ("env EVIDENCE_DIR", "Write the folder the evidence volume appears at inside the container: /evidence. The same word goes in the volume mount below.", "The collector reads this name and the gate checks that every write starts from it, so the pod and the script must agree on one folder."),
+                        ("env EVIDENCE_DIR (already filled in)", "The folder the evidence volume appears at inside the container: /evidence. The same word is used in the volume mount below.", "The collector reads this name and the gate checks that every write starts from it, so the pod and the script must agree on one folder."),
                         ("env PATH (already filled in)", "Puts the oc-bin folder first in PATH, the list of folders the shell searches for programs, so the shell finds the oc that get-oc left there.", "Without it the collector cannot find oc, because oc is not in the Python image."),
-                        ("args", "Write one line for the shell to run. Use curl with -sf (-s is quiet, -f fails on a web error) to fetch collect_evidence.py from the main branch and save it as /tmp/collect_evidence.py. The address is $GITEA_URL/$GITEA_USER/evidence-scripts/raw/branch/main/collect_evidence.py. Join the next command to it with && so it runs only if the download worked: python3 /tmp/collect_evidence.py.", "Fetching from main on every run is what makes the schedule inherit the review, and && stops a failed download from running an old or empty file. Write the two variables as shown; the pod fills them in."),
-                        ("volumeMounts evidence", "Write the same folder as EVIDENCE_DIR for mountPath.", "A path that differs from EVIDENCE_DIR would send the evidence to the pod's own disk, which is lost when the pod ends."),
-                        ("serviceAccountName", "Write the line serviceAccountName: evidence-runner, the read-only identity the lab made. It goes at the same indent as containers: above, after the container entry.", "The job holds read access only, so a flaw in the collector cannot change the cluster."),
+                        ("args (you write this)", "Write one line for the shell to run. Use curl with -sf (-s is quiet, -f fails on a web error) to fetch collect_evidence.py from the main branch and save it as /tmp/collect_evidence.py. The address is $GITEA_URL/$GITEA_USER/evidence-scripts/raw/branch/main/collect_evidence.py. Join the next command to it with && so it runs only if the download worked: python3 /tmp/collect_evidence.py.", "Fetching from main on every run is what makes the schedule inherit the review, and && stops a failed download from running an old or empty file. Write the two variables as shown; the pod fills them in."),
+                        ("volumeMounts evidence (already filled in)", "The mountPath is the same folder as EVIDENCE_DIR, /evidence.", "A path that differs from EVIDENCE_DIR would send the evidence to the pod's own disk, which is lost when the pod ends."),
+                        ("serviceAccountName (already filled in)", "Runs the job as evidence-runner, the read-only identity the lab made. It sits at the same indent as containers: above, after the container entry.", "The job holds read access only, so a flaw in the collector cannot change the cluster."),
                     ],
                 },
                 {
@@ -643,7 +643,7 @@ MODULE = {
                         "oc auth can-i list namespaces --as=system:serviceaccount:build:default"
                     ),
                     "label": 'Check your file against the spec, then check the check',
-                    "intro": "You will now join your two parts, run the lab's check on the result, run the same check on a copy with the wrong identity, and ask the cluster what each identity may read. If a line starts with FAIL, read the message, which names the property that is wrong, fix it by running the 5b block again with your corrected answers, and then run this block again. An error right after the join usually means cronjob-tail.yaml or cronjob-head.yaml is empty: write it again.",
+                    "intro": "You will now join your two parts, run the lab's check on the result, run the same check on a copy with the wrong identity, and ask the cluster what each identity may read. If a line starts with FAIL, read the message, which names the property that is wrong, fix it by running the 5b block again with your corrected answer, and then run this block again. An error right after the join usually means cronjob-tail.yaml or cronjob-head.yaml is empty: write it again.",
                     "expect": "Example only. A file that follows the spec prints PASS for every property.\nPASS service account\nPASS evidence folder\nPASS path holds oc\nPASS volume mount\nPASS fetch from main\nPASS address from variables\nPASS stop on bad download\nPASS runs the collector\nFAIL service account: serviceAccountName must be evidence-runner\nyes\n(a warning that namespaces is not namespace scoped may print before each answer; it is harmless)\nno",
                     "lines": [
                         ("cat cronjob-head.yaml cronjob-tail.yaml > evidence-cronjob.yaml", "Joins the two parts, the lab's first and yours second, into the file you will apply. It replaces the file each time, so repeating it is safe.", "oc reads one complete file."),
@@ -660,7 +660,7 @@ MODULE = {
                         "oc get configmap cronjob-reference -n build -o jsonpath='{.data.cronjob-tail\\.yaml}'"
                     ),
                     "label": 'If you are stuck, or when you have passed: see the reference answer',
-                    "intro": 'You will now print the reference tail from the lab and compare it with your own. Do not open the reference until you have tried and run the check in 5c at least once. Yours may differ in wording and still be right if the check passes.',
+                    "intro": 'You will now print the reference tail from the lab and compare it with your own. Do not open the reference until you have tried and run the check in 5c at least once. The three filled-in parts will match; compare the args line. Yours may differ in wording and still be right if the check passes.',
                     "expect": "Example only. The text of the reference tail, from env: to serviceAccountName: evidence-runner.",
                     "lines": [
                         ("oc get configmap cronjob-reference ...", "Prints the lab's reference version of the end of the CronJob from the config map the lab saved.", "It lets you see one correct version after you have tried your own."),
@@ -694,7 +694,7 @@ MODULE = {
                     ],
                 },
             ],
-            "action": "Save the first part, write the end from the table, run the check until every line says PASS, then apply the file and run the job once.",
+            "action": "Save the first part, write the one fetch line from the table, run the check until every line says PASS, then apply the file and run the job once.",
             "checkpoint": "Every property prints PASS for your file and the bad copy prints FAIL for the service account. The job completes, and the first two lines of job.txt are FILE with an evidence name and SHA256 with 64 characters.",
         },
     ],

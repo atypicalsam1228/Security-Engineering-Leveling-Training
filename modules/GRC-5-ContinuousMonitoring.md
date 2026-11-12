@@ -2,7 +2,7 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 24 of 29 in the recommended order |
+| Sequence | Module 27 of 32 in the recommended order |
 | Timed work | About 60 minutes (41 hands-on, 19 verify) |
 | Standalone start | `lab start grc-5` |
 | Combined start | Continue from the end state of the previous module |
@@ -800,6 +800,11 @@ job.batch/monitor-first condition met
 | oc create configmap monitor-scripts ... \| oc apply -f - | Packs the scripts and the scope file into one object the job mounts at /scripts. Going through apply means a repeat run replaces it. | The job needs the scripts inside the cluster, and one config map keeps them with the scope file, so a second team changes one place. |
 | oc get configmap monitor-scripts ... \| grep -c 'def compare' | Reads drift.py back out of the cluster and counts the lines that define compare. It prints 1. | It shows the job will run your compare function. 0 means the stored drift.py lacks it; redo Step 3. |
 | oc apply -f control-monitor.yaml | Saves the CronJob. | The job runs the three scripts from the config map on a schedule. |
+| control-monitor.yaml: schedule and concurrencyPolicy | Runs every 15 minutes. Forbid stops a new run from starting while the last one is still running. | A short gap shows several runs in one session, and two overlapping runs would write at the same time. |
+| control-monitor.yaml: serviceAccountName monitor-reader | Runs the job as the read-only identity the lab made, which can read only the team namespace. | A flaw in a script cannot change the cluster. |
+| control-monitor.yaml: initContainers get-oc | Copies the oc program out of the public image quay.io/openshift/origin-cli:4.22.0 into the oc-bin scratch folder, then ends. | The Python image has no oc and the scripts call it. |
+| control-monitor.yaml: the shell command | Runs convert, then measure, then drift, in that order. Each writes a file with the run time in its name into /out, and the numbers are printed to the log. | Measure reads the file convert wrote, so the order is fixed, and the time in the names keeps every run's files. |
+| control-monitor.yaml: volumes | The scripts and the baseline are config maps mounted read-only. out is the volume claim monitor-pvc, and oc-bin is the scratch folder. | The job can read its scripts and baseline but cannot change them, and only /out keeps files. |
 | oc delete job monitor-first ... --ignore-not-found | Removes a manual job left from an earlier run, if there is one. | Lets you run this block twice. |
 | oc create job monitor-first --from=cronjob/... | Starts one run now without waiting for the schedule. | You can read the numbers now instead of waiting up to 15 minutes. |
 | oc wait --for=condition=complete | Waits up to three minutes for the run to finish. The first run is slower because the images are pulled. | The log is complete only when the job has finished. |

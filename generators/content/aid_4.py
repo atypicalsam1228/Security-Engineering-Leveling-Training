@@ -18,7 +18,7 @@ MODULE = {
     "controls": ["AC-6", "CM-7", "SI-10", "AU-12"],
     "mentions": ["AU-3", "SI-4"],
     "unit_values_ok": ["2000 characters"],
-    "minutes": {"hands_on": 48, "verify": 19},
+    "minutes": {"hands_on": 44, "verify": 19},
     "tools": ["Python (python3)", "oc", "Loki (free, open source)", "Stub model service (provided by the lab)", "curl", "jq"],
     "tool_why": True,
     "hide_draft": True,
@@ -112,13 +112,13 @@ MODULE = {
         {"label": "Tools", "text": "`python3` runs the loop, allowed list and audit writer. `oc` sends each command as the view-only identity using `--as` impersonation. Loki stores the action trail, which `ailog.py` sends."},
         {"label": "Security Function", "text": "Prevents prompt injection from reaching the cluster. A model that is steered can only propose. `policy.py` refuses commands outside the allowed list, and the platform refuses them again through the view-only identity, even if the wrapper has a bug."},
         {"label": "NIST AC-6 Least Privilege", "text": "A service account with the built-in view role in project demo runs every command through `--as`. The platform refuses anything outside that role, including secrets and deletes, whatever the wrapper says."},
-        {"label": "NIST CM-7 Least Functionality", "text": "`policy.py` permits three read-only verbs, four kinds of object plus the one you add, and one project. Anything else is refused before it reaches the cluster."},
+        {"label": "NIST CM-7 Least Functionality", "text": "`policy.py` permits three read-only verbs, four kinds of object plus ReplicaSets, and one project. Anything else is refused before it reaches the cluster."},
         {"label": "NIST SI-10 Information Input Validation", "text": "`parse_proposal` in `agent.py` accepts only two shapes from the model: run with a command, or finish with a summary. `check_command` in `policy.py` then checks every word of a run command."},
         {"label": "NIST AU-12 Audit Record Generation", "text": "`audit.py` pushes a record to Loki for every allowed, refused, invalid, finished, stopped and capped event before the action happens. The loop stops if Loki cannot be reached."},
     ],
     "requirement_bullets": [
         "Purpose: show that a prompt-injected instruction cannot reach the cluster when the loop enforces an allowed list and a view-only identity.",
-        "You build `flags.py` and `policy.py` (the allowed list), `agent.py` (the proposal parser and command runner), and `loop.py` (the full loop with cap and stop switch). You also add one kind of object yourself.",
+        "You build `flags.py` and `policy.py` (the allowed list), `agent.py` (the proposal parser and command runner), and `loop.py` (the full loop with cap and stop switch). You also add one kind of object (ReplicaSets) by writing test cases for it first.",
         "You run six scripted scenarios, including an injection that proposes a delete, and read the action trail in Loki.",
     ],
     "mapping": [
@@ -137,7 +137,7 @@ MODULE = {
             "plain": "Allow only the functions the job needs and block the rest.",
             "source": "NIST",
             "tool": "The command allowed list in policy.py, which runs commands as separate words with no shell. Explained in section 2.1.",
-            "covered": "Section 3, Step 2: write the allowed list (a list of what is permitted, where anything else is refused): three read-only verbs, four kinds of object plus the one you add, one project (a named section of the cluster). Section 4, Test 2: a delete is refused. Section 4, Test 4: secrets and chained commands are refused.",
+            "covered": "Section 3, Step 2: write the allowed list (a list of what is permitted, where anything else is refused): three read-only verbs, four kinds of object plus ReplicaSets, one project (a named section of the cluster). Section 4, Test 2: a delete is refused. Section 4, Test 4: secrets and chained commands are refused.",
             "cite": [
                 {"file": NIST, "quote": "Prohibit or restrict the use of the following functions, ports, protocols, software, and/or"},
             ],
@@ -274,7 +274,7 @@ MODULE = {
                     "text": "The control asks the organization to configure the system to provide only organization-defined mission essential capabilities, and to prohibit or restrict organization-defined functions, ports, protocols, software and services. NIST leaves both lists to the organization. This is done using:",
                 },
                 {"bullets": [
-                    "policy.py: permits three read-only verbs, four kinds of object plus the one you add, and one project, and refuses everything else before it reaches the cluster.",
+                    "policy.py: permits three read-only verbs, four kinds of object plus ReplicaSets, and one project, and refuses everything else before it reaches the cluster.",
                     "flags.py: accepts only a few options, so options such as --as or -o yaml are refused.",
                     "`shlex.split` with no shell: breaks a command into separate words and runs it without a shell, so a second command cannot be chained on.",
                 ]},
@@ -377,10 +377,10 @@ MODULE = {
             "learn": "Build the allowed list that is the only code deciding whether a proposed command runs. Writing your own test cases first, watching them fail, then fixing the list proves the check works before the loop uses it.",
             "takeaway": "An allowed list names what is permitted, so anything not on it is refused, including the verb nobody thought of.",
             "controls": [
-                {"id": 'CM-7 Least Functionality', "how": 'You write the allowed list: three read-only verbs, four kinds of object plus the one you add, and one project. The test run checks ten commands and each bad one must be refused with a reason.'},
+                {"id": 'CM-7 Least Functionality', "how": 'You write the allowed list: three read-only verbs, four kinds of object plus ReplicaSets, and one project. The test run checks ten commands and each bad one must be refused with a reason.'},
                 {"id": 'SI-10 Information Input Validation', "how": 'The allowed list splits the command into words and checks every one. A shell character, an unknown flag or an unlisted kind of object is refused with a reason.'},
             ],
-            "why": "The allowed list splits text into separate words so no shell ever sees it and nothing can be chained, then checks every word against what is permitted. `flags.py` holds the option rules, `policy.py` holds the verbs and kinds. You write `my_cases.py` and `kinds.py` yourself.",
+            "why": "The allowed list splits text into separate words so no shell ever sees it and nothing can be chained, then checks every word against what is permitted. `flags.py` holds the option rules, `policy.py` holds the verbs and kinds. You write the two test cases in `my_cases.py` yourself. The one-line `kinds.py` that adds ReplicaSets is supplied for you to paste.",
             "blocks": [
                 {
                     "code": (
@@ -477,14 +477,14 @@ MODULE = {
                     "lines": [
                         ("cd ... ; cat > policy.py <<'EOF' ... EOF", "Moves into the agent folder and writes everything between the first and the last line into policy.py. Running it again replaces the file with the same text.", "The lab has no editor, so a paste is how you make the file."),
                         ("test -s policy.py && echo ok || echo EMPTY", "Prints ok if the file has content and EMPTY if it has none.", "Pasting the block twice can leave the file empty. If EMPTY shows, paste the block again."),
-                        ("VERBS, KINDS", "The permitted verbs and kinds of object in two small sets. The four kinds written here are the starting list. KINDS also adds MORE_KINDS, the extra kinds from kinds.py, which you write in 2e. To allow something new you change a list in a reviewed change.", "Everything the agent may read is listed in these two sets, so a review of the list is a review of the agent's power."),
+                        ("VERBS, KINDS", "The permitted verbs and kinds of object in two small sets. The four kinds written here are the starting list. KINDS also adds MORE_KINDS, the extra kinds from kinds.py, which you paste in 2e. To allow something new you change a list in a reviewed change.", "Everything the agent may read is listed in these two sets, so a review of the list is a review of the agent's power."),
                         ("NAME, LOG_TARGET", "Patterns for a resource name and for the one log target form allowed, deployment/NAME. A name with spaces or symbols never matches.", "Strict patterns for names stop a proposal from sneaking extra words or symbols into the command."),
                         ("SHELL_CHARS", "Characters a shell treats as special, such as ; & | and $. Any of them in the text means refuse.", "These characters are how a shell chains or expands commands, so any of them means the proposal is refused."),
-                        ("try: from kinds import MORE_KINDS ... except ImportError", "Reads the extra kinds from kinds.py if that file exists. If it does not, MORE_KINDS is an empty set and nothing extra is allowed.", "A missing file leaves the list at its narrowest, never wider. You write kinds.py in this step."),
+                        ("try: from kinds import MORE_KINDS ... except ImportError", "Reads the extra kinds from kinds.py if that file exists. If it does not, MORE_KINDS is an empty set and nothing extra is allowed.", "A missing file leaves the list at its narrowest, never wider. You paste kinds.py in 2e."),
                         ("from flags import check_flags", "Takes the option check from flags.py.", "The option rules sit in their own file, so each file stays short enough to read."),
                         ("`argv[0] != \"oc\" or argv[1] not in VERBS`", "The command must start with oc and one of three read-only verbs. oc delete, oc exec and oc apply stop here.", "This is the first gate, where the words that make a command harmful, such as delete or exec, are stopped."),
                         ("verb == \"logs\"", "Logs have their own rule: the target must be deployment/NAME.", "Logs take a different target than get and describe, so they need their own check."),
-                        ("target not in KINDS", "A get or describe may name only the kinds in KINDS: the four supplied ones and any you add in kinds.py. Secrets, nodes and config maps are not on the list.", "This keeps the agent away from kinds of object you did not list, secrets included."),
+                        ("target not in KINDS", "A get or describe may name only the kinds in KINDS: the four supplied ones and any kinds.py adds. Secrets, nodes and config maps are not on the list.", "This keeps the agent away from kinds of object you did not list, secrets included."),
                         ("has_name ...", "An optional object name, checked against a strict pattern.", "A name is data from the model, so it is checked against the strict pattern too."),
                         ("check_command(text)", "The function the loop calls. It returns the command as separate words if allowed, or a reason if not.", "One function is the single door into the cluster, so every proposal passes the same checks."),
                         ("`shlex.split(text)`", "Splits the text into words the way a shell would, without running anything.", "The command becomes separate words without a shell ever running, so nothing can be chained."),
@@ -547,7 +547,7 @@ MODULE = {
                         "python3 try_policy.py"
                     ),
                     "label": 'Your turn: write two test cases first, then run them (they should fail once)',
-                    "intro": 'You will now write two test cases for ReplicaSets (the objects a deployment uses to keep its pods running), which a triage often needs. You write them before the allowed list can pass them. The block below is a scaffold: type it, and replace each ____ with the full command text. Case one is the command that lists the ReplicaSets in project demo and must be allowed. Case two is `oc get replicasets -n demo -o yaml`, and it must be refused. oc takes the kind as a lowercase plural. One of the two cases should print MISMATCH, because the allowed list does not know ReplicaSets yet. Try the cases yourself before you look at any reference. The first line printed is ok when my_cases.py has content. An import error when you run the cases usually means flags.py, policy.py or try_policy.py is empty, so paste its block again.',
+                    "intro": 'You will now write two test cases for ReplicaSets (the objects a deployment uses to keep its pods running), which a triage often needs. You write them before the allowed list can pass them. The block below is a scaffold: type it, and replace each ____ with the full command text. Case one is the command that lists the ReplicaSets in project demo and must be allowed. Case two is `oc get replicasets -n demo -o yaml`, and it must be refused. oc takes the kind as a lowercase plural. One of the two cases should print MISMATCH, because the allowed list does not know ReplicaSets yet. The first line printed is ok when my_cases.py has content. An import error when you run the cases usually means flags.py, policy.py or try_policy.py is empty, so paste its block again.',
                     "expect": 'Example only. The line for your first case shows MISMATCH and the last line says 1 mismatches.\nok\nok       ALLOW  oc get pods -n demo \nok       ALLOW  oc logs deployment/noisy-app -n demo --tail=20 \nok       REFUSE oc delete pods --all -n demo (only oc get, describe and logs are allowed)\nok       REFUSE oc get secrets -n demo (resource kind not allowed: secrets)\nok       REFUSE oc get pods -n demo -o yaml (flag or value not allowed: -o)\nok       REFUSE oc get pods -n kube-system (flag or value not allowed: -n)\nok       REFUSE oc get pods -n demo; oc delete pods --all -n demo (shell characters are not allowed)\nok       REFUSE oc get pods -n demo --as=system:admin (flag or value not allowed: --as=system:admin)\nMISMATCH REFUSE oc get replicasets -n demo (resource kind not allowed: replicasets)\nok       REFUSE oc get replicasets -n demo -o yaml (resource kind not allowed: replicasets)\n10 cases, 1 mismatches',
                     "lines": [
                         ("cd ... ; cat > my_cases.py <<'EOF' ... EOF", "Writes your two cases into my_cases.py, in the folder where try_policy.py already is.", "The runner reads this file, so your cases must be in it."),
@@ -561,18 +561,18 @@ MODULE = {
                     "code": (
                         WORK
                         + "cat > kinds.py <<'EOF'\n"
-                        "MORE_KINDS = {\"____\", \"____\"}\n"
+                        "MORE_KINDS = {\"replicasets\", \"replicaset\"}\n"
                         "EOF\n"
                         "test -s kinds.py && echo ok || echo EMPTY\n"
                         "python3 try_policy.py"
                     ),
-                    "label": 'Your turn: add the kind to the allowed list, then run the cases again',
-                    "intro": 'You will now make the failing case pass. policy.py already looks for a file named kinds.py with a set named MORE_KINDS. Type the scaffold below. Replace each ____ with a name oc accepts for ReplicaSets: the plural and the singular, both lowercase, like the other kinds in policy.py. The command then runs the same ten cases again. The first line printed is ok when kinds.py has content.',
+                    "label": 'Add the ReplicaSets kind to the allowed list, then run the cases again',
+                    "intro": 'You will now make the failing case pass. policy.py already looks for a file named kinds.py with a set named MORE_KINDS. Paste the block below, which writes kinds.py with the plural and the singular name oc accepts for ReplicaSets, both lowercase like the other kinds in policy.py. The block then runs the same ten cases again. The first line printed is ok when kinds.py has content.',
                     "expect": 'Example only. All ten case lines say ok and the last line says 0 mismatches.\nok\nok       ALLOW  oc get pods -n demo \nok       ALLOW  oc logs deployment/noisy-app -n demo --tail=20 \nok       REFUSE oc delete pods --all -n demo (only oc get, describe and logs are allowed)\nok       REFUSE oc get secrets -n demo (resource kind not allowed: secrets)\nok       REFUSE oc get pods -n demo -o yaml (flag or value not allowed: -o)\nok       REFUSE oc get pods -n kube-system (flag or value not allowed: -n)\nok       REFUSE oc get pods -n demo; oc delete pods --all -n demo (shell characters are not allowed)\nok       REFUSE oc get pods -n demo --as=system:admin (flag or value not allowed: --as=system:admin)\nok       ALLOW  oc get replicasets -n demo \nok       REFUSE oc get replicasets -n demo -o yaml (flag or value not allowed: -o)\n10 cases, 0 mismatches',
                     "lines": [
                         ("cd ... ; cat > kinds.py <<'EOF' ... EOF", "Writes the extra kinds into kinds.py. policy.py adds this set to its own four kinds. If the file is missing, policy.py adds nothing, so the list stays as narrow as before.", "The one change you make to the agent's power sits in its own small file, so a reviewer can read it at a glance."),
                         ("test -s kinds.py && echo ok || echo EMPTY", "Prints ok if the file has content and EMPTY if it has none.", "Pasting the block twice can leave the file empty. If EMPTY shows, paste the block again."),
-                        ("MORE_KINDS = {\"____\", \"____\"}", "Replace both ____ with the two lowercase names for ReplicaSets.", "A kind that is not in this set stays refused, whatever the model proposes."),
+                        ("`MORE_KINDS = {\"replicasets\", \"replicaset\"}`", "The two lowercase names oc accepts for ReplicaSets, plural and singular. They are the only change to the agent's power in this module.", "A kind that is not in this set stays refused, whatever the model proposes."),
                         ("python3 try_policy.py", "Runs all ten cases again.", "All ten ok, with the delete and the -o yaml cases still refused, proves you widened the list by one kind and nothing else."),
                     ],
                 },
@@ -593,22 +593,10 @@ MODULE = {
                         ("cp try_policy.py my_cases.py stored/; python3 stored/try_policy.py | tail -n 1", "Adds the test runner and your cases next to the stored files and runs the ten cases there. The last line is the result.", "No mismatch on the stored copy shows it is the list you tested."),
                     ],
                 },
-                {
-                    "code": (
-                        "oc get configmap aid4-ref -n ai-lab -o json | jq -r '.data[\"my_cases.py\"], .data[\"kinds.py\"]'"
-                    ),
-                    "label": 'Only after you have tried: compare with the reference answer',
-                    "intro": 'You will now print the two reference files that the lab stored in project ai-lab, so you can compare them with your own. Do not open the reference files until you have tried both blocks above; if you are stuck for more than a few minutes, look. Different wording is fine if all ten cases say ok and the -o yaml case is still refused.',
-                    "expect": 'Example only.\nMY_CASES = [\n    ("oc get replicasets -n demo", True),\n    ("oc get replicasets -n demo -o yaml", False),\n]\nMORE_KINDS = {"replicasets", "replicaset"}',
-                    "lines": [
-                        ("oc get configmap aid4-ref -n ai-lab -o json", "Reads the config map that holds the reference files and prints it as JSON.", "The answer is kept on the cluster, not in your folder, so it is not in front of you while you work."),
-                        ("jq -r '.data[\"my_cases.py\"], .data[\"kinds.py\"]'", "Prints the text of the two reference files, one after the other.", "You compare your own files with these two."),
-                    ],
-                },
             ],
             "tip": "The option -o yaml is refused because a full object dump can hold data you did not mean to read, even when the platform would allow it. --as is refused so a proposal cannot change the identity the loop runs as.",
-            "action": "Paste flags.py, policy.py and try_policy.py. Then write my_cases.py and kinds.py yourself, run the cases after each, store the list in the config map, and open the reference answer only afterwards.",
-            "checkpoint": "The first run of your cases prints one MISMATCH and ends with 10 cases, 1 mismatches. After kinds.py the last line says 10 cases, 0 mismatches, and the stored copy in the config map says the same. The ReplicaSets case is ALLOW and the same case with -o yaml is REFUSE, and the delete, secrets and chained cases are still REFUSE.",
+            "action": "Paste flags.py, policy.py and try_policy.py. Write the two cases in my_cases.py yourself and run them, paste kinds.py and run them again, then store the list in the config map.",
+            "checkpoint": "The first run of your cases prints one MISMATCH and ends with 10 cases, 1 mismatches. After you paste kinds.py the last line says 10 cases, 0 mismatches, and the stored copy in the config map says the same. The ReplicaSets case is ALLOW and the same case with -o yaml is REFUSE, and the delete, secrets and chained cases are still REFUSE.",
         },
         {
             "title": "Write the loop: validate, log, cap and stop",
@@ -773,21 +761,11 @@ MODULE = {
                         ("sys.exit(6)", "Exit status 6 means the audit log could not be written.", "A distinct status tells a person or a schedule that the run ended because logging failed."),
                     ],
                 },
-                {
-                    "code": WORK + "python3 -m py_compile audit.py agent.py loop.py policy.py flags.py",
-                    "label": 'Check that all five files are well formed',
-                    "intro": 'You will now check the five files for typing errors without running them.',
-                    "expect": 'Example only.\n(no output means all five files are well formed)',
-                    "lines": [
-                        ("cd /workspace/aid-4/agent", "Moves into the agent folder made in Step 1.", "All five files are there."),
-                        ("`python3 -m py_compile ...`", "Checks that all five files are well formed without running them. No output means success.", "Checking how all five files are written catches a typing slip before the first run."),
-                    ],
-                },
             ],
             "security": "The model's text is never run as a shell command and never changes the identity, the limits or the log. Only the wrapper's own constants decide those. If you find yourself adding a rule that depends on what the model says it is doing, stop: the model can say anything.",
             "note": "Trade-off: after a refusal this loop ends the run. Letting the model try another step would sometimes finish the triage, but each retry gives injected text another attempt. Ending the run costs a person one rerun, so the lab ends it.",
-            "action": "Extract audit.py and `ailog.py`, read audit.py, paste agent.py and loop.py, then run the check.",
-            "checkpoint": "python3 -m py_compile prints nothing, which means all five files are well formed.",
+            "action": "Extract audit.py and `ailog.py`, read audit.py, then paste agent.py and loop.py.",
+            "checkpoint": "Both pastes print ok. Step 4 runs the loop, and an import error there means a file is empty, so paste its block again.",
         },
         {
             "title": "Run a clean triage and read the trail",

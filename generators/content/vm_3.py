@@ -16,7 +16,7 @@ def heredoc_expect(name, body):
 RANK_PY = r'''"""Load Trivy findings and rank them."""
 import json
 
-SEVERITY_ORDER = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+from ranking_rule import sort_key
 
 
 def load_findings(path):
@@ -40,10 +40,21 @@ def load_findings(path):
 
 
 def rank(findings):
-    def key(item):
-        return (-SEVERITY_ORDER.get(item["severity"], 0), -item["score"], not item["fix"], item["id"])
+    return sorted(findings, key=sort_key)
+'''
 
-    return sorted(findings, key=key)
+SORTKEY_PY = r'''"""The sort rule for findings."""
+
+SEVERITY_ORDER = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+
+
+def sort_key(item):
+    return (
+        -SEVERITY_ORDER.get(item["severity"], 0),
+        item["score"],
+        item["fix"],
+        item["id"],
+    )
 '''
 
 DEADLINES_PY = r'''"""Due dates and tracking-item titles."""
@@ -183,7 +194,7 @@ MODULE = {
     "controls": ["RA-5", "SI-2", "SA-11"],
     "mentions": ["CA-5", "SI-2(3)", "VM-2", "VM-4"],
     "unit_values_ok": ["15 days", "30 days", "90 days", "30 seconds"],
-    "minutes": {"hands_on": 48, "verify": 20},
+    "minutes": {"hands_on": 52, "verify": 20},
     "tools": [
         "OpenShift Container Platform",
         "Trivy (free, open source)",
@@ -514,18 +525,17 @@ MODULE = {
                     "code": heredoc("rank.py", RANK_PY),
                     "expect": heredoc_expect("rank.py", RANK_PY),
                     "label": 'Create rank.py',
-                    "intro": 'You will now paste this block into lab shell to create the file rank.py in your folder, and the quick check in 2c runs it (this way of making a file is called a heredoc).',
-                    "look_for": ['SEVERITY_ORDER gives each severity word a number. Without it the words would sort by spelling, not by how serious they are.', 'The check for Results at the top of load_findings raises an error for a report with no Results, so an empty scan cannot pass for a clean one.', 'The found dictionary (a lookup table) uses the CVE ID and the package name together as its key, so a second copy of the same finding replaces the first.', 'The key function inside rank holds the whole ranking rule from section 2.1: severity first, then score, then findings with a fix, then the CVE ID.'],
+                    "intro": 'You will now paste this block into lab shell to create the file rank.py in your folder, and the check in 2d runs it (this way of making a file is called a heredoc).',
+                    "look_for": ['rank calls sorted with sort_key, the rule you write in the next block but one, so the order of the findings comes from one small function.', 'The check for Results at the top of load_findings raises an error for a report with no Results, so an empty scan cannot pass for a clean one.', 'The found dictionary (a lookup table) uses the CVE ID and the package name together as its key, so a second copy of the same finding replaces the first.', 'from ranking_rule import sort_key loads the rule from the file you write yourself in the block after deadlines.py.'],
                     "lines": [
                         ("wc -l rank.py", "Counts the lines of the file you just made.", "A quick check that the whole file arrived. The count should match the number in the expected output."),
                         ("cd /workspace/vm-3", "Moves into the working folder of this module.", "The file must land next to the other files, whatever folder you were in before."),
                         ("cat > rank.py <<'EOF' ... EOF", "Writes every line between the two marker lines into the file rank.py. The quotes around EOF keep each dollar sign and backslash exactly as typed.", "Lab shell has no editor, so a block like this is how a file is made. Running it twice just writes the same file again."),
-                        ("SEVERITY_ORDER", "Gives each severity word a number so they sort in the right order.", "Words do not sort by seriousness, so the rule in section 2.1 needs numbers."),
+                        ("from ranking_rule import sort_key", "Loads the sort rule from ranking_rule.py, the file you write in this step.", "The ranking rule is the part you write yourself, so it lives in its own small file."),
                         ("if not report.get(\"Results\")", "Refuses a report that analyzed nothing, with a clear message.", "An empty scan must never look clean, and later it keeps close mode from closing every item."),
                         ("found[(id, package)] = {...}", "Keeps one record per (CVE ID, package). A second copy with the same key replaces the first, which removes duplicates.", "Keeping one record per finding is what makes one tracking item per finding possible."),
                         ("max(scores, default=0.0)", "Takes the highest CVSS score any source gave. A finding with no score counts as 0.0.", "The score is the second sort key, so every finding needs a number."),
-                        ("key(item)", "The sort rule: highest severity first, highest score first, fixable first, then CVE ID. The minus signs make large numbers sort first. The test not item[\"fix\"] is False when a fix exists, and False sorts before True.", "This one line is the whole ranking rule, so the gate can check it against the rule written in section 2.1."),
-                        ("sorted(...)", "Returns a new list and leaves the original alone.", "The report data stays unchanged, so ranking twice gives the same answer."),
+                        ("sorted(findings, key=sort_key)", "Orders the findings with your rule. Returns a new list and leaves the original alone.", "The report data stays unchanged, so ranking twice gives the same answer."),
                     ],
                 },
                 {
@@ -545,19 +555,34 @@ MODULE = {
                     ],
                 },
                 {
-                    "code": (
-                        "cd /workspace/vm-3 && python3 -c 'import rank; print([f[\"id\"] + \" \" + f[\"severity\"] for f in rank.rank(rank.load_findings(\"fixture-findings.json\"))][:4])'"
-                    ),
-                    "label": 'Check the ranking on the supplied fixture',
-                    "intro": 'You will now run your ranking code on a known input and print the first four findings, from the same folder as rank.py.',
-                    "expect": "Example only. The IDs will differ.\n['CVE-<id> CRITICAL', 'CVE-<id> CRITICAL', 'CVE-<id> HIGH', 'CVE-<id> HIGH']",
+                    "lang": "bash",
+                    "code": heredoc("ranking_rule.py", SORTKEY_PY),
+                    "expect": heredoc_expect("ranking_rule.py", SORTKEY_PY),
+                    "label": 'Your turn: write the sort rule',
+                    "intro": 'You will now write ranking_rule.py, the sort rule, with two gaps on purpose: the score and the fix test are the wrong way round. Run the block once so the file exists. Fix the two lines yourself from the note below this block by running the same command again with your own lines.',
+                    "look_for": ['The first line of the list is already right: the minus sign makes a high severity number sort first.', 'Python sorts a list of values one item at a time, so the second item only matters when the first two findings tie on the first.'],
                     "lines": [
-                        ("python3 -c '...'", "Runs one line of Python. It loads the supplied fixture, ranks it and prints the first four findings.", "A quick test of your ranking code on a known input, before you build anything on top of it."),
+                        ("cat > ranking_rule.py <<'EOF' ... EOF", "Writes the starter into the file. Running the command again with different lines replaces the file.", "This is how you edit without an editor: write the whole file again."),
+                        ("-SEVERITY_ORDER.get(item[\"severity\"], 0)", "Turns the severity word into a number and negates it, so Critical sorts first. This part is already right.", "Sorting goes from small to large, so a minus sign puts the largest first."),
+                        ("item[\"score\"]", "The first gap. As written, the lowest score sorts first.", "Within one severity the rule wants the highest score first."),
+                        ("item[\"fix\"]", "The second gap. As written, a finding with no fix (an empty text) sorts before one with a fix.", "The rule wants a finding that can be fixed now ahead of one that cannot."),
+                    ],
+                },
+                {
+                    "code": (
+                        "cd /workspace/vm-3 && python3 -c 'import rank; ids = [f[\"id\"][-4:] for f in rank.rank(rank.load_findings(\"fixture-findings.json\"))]; print(ids == [\"1001\", \"1006\", \"1003\", \"1002\", \"1005\", \"1008\", \"1004\", \"1007\"], ids)'"
+                    ),
+                    "label": 'Check your sort rule on the supplied fixture',
+                    "intro": 'You will now rank the supplied fixture with your rule. The command prints True when the whole order is right, then the order it produced. Until you fix the two gaps it prints False.',
+                    "expect": "Example only.\nTrue ['1001', '1006', '1003', '1002', '1005', '1008', '1004', '1007']",
+                    "lines": [
+                        ("python3 -c '...'", "Runs one line of Python. It loads the supplied fixture, ranks it with your rule and prints True if the order matches the rule in section 2.1.", "A check that proves your rule before the gate in Step 4 runs it again on the full script."),
                     ],
                 },
             ],
-            "action": "Paste the two blocks, then run the quick check.",
-            "checkpoint": "The first two findings printed are CRITICAL and the next two are HIGH.",
+            "note": "Your sort_key must rank by severity, then the highest score first, then a finding with a fix before one without, then the CVE ID. Use the first line of the list as your pattern. Reference, only after you have tried: the second line is -item[\"score\"] and the third is not item[\"fix\"], which is False when a fix exists, and False sorts before True.",
+            "action": "Paste the two blocks, write ranking_rule.py yourself, then run the check.",
+            "checkpoint": "The check prints True, and the order it lists starts 1001, 1006 (both Critical).",
         },
         {
             "title": "Write the Gitea code",
@@ -751,8 +776,8 @@ MODULE = {
             "code": (
                 "cd /workspace/vm-3\n"
                 "mkdir -p broken\n"
-                "cp rank.py deadlines.py gitea_api.py gitea_items.py triage.py broken/\n"
-                "sed 's/(-SEVERITY_ORDER/(SEVERITY_ORDER/' rank.py > broken/rank.py\n"
+                "cp rank.py ranking_rule.py deadlines.py gitea_api.py gitea_items.py triage.py broken/\n"
+                "sed 's/-SEVERITY_ORDER/SEVERITY_ORDER/' ranking_rule.py > broken/ranking_rule.py\n"
                 "python3 review_gate.py broken\n"
                 "echo \"exit code: $?\""
             ),
@@ -771,7 +796,7 @@ MODULE = {
             ),
                         "lines": [
                 ('cp ... broken/', 'Copies your files into a folder named broken.', 'You break the copy and leave your files alone.'),
-                ("sed 's/(-SEVERITY_ORDER/(SEVERITY_ORDER/' ...", 'Removes one minus sign in the copy of rank.py.', 'Removing it reverses the severity order.'),
+                ("sed 's/-SEVERITY_ORDER/SEVERITY_ORDER/' ...", 'Removes one minus sign in the copy of ranking_rule.py.', 'Removing it reverses the severity order.'),
                 ('FAIL  items are ranked ...', 'The gate catches the wrong order.', 'A gate you have seen fail is a gate you can trust.'),
                 ('exit code: 1', 'The gate ends with a non-zero code.', 'A pipeline would stop on this code.'),
             ],

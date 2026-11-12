@@ -80,7 +80,7 @@ MODULE = {
     "controls": ["AC-6", "SC-7", "CM-6"],
     "mentions": ["CM-3", "CM-7", "AC-3"],
     "unit_values_ok": ["3 seconds", "10 minutes"],
-    "minutes": {"hands_on": 52, "verify": 16},
+    "minutes": {"hands_on": 50, "verify": 16},
     "tools": [
         "OpenShift Container Platform",
         "Kubernetes RBAC and NetworkPolicy (included with OpenShift)",
@@ -654,7 +654,7 @@ MODULE = {
                         "jq . report-policy.json > /dev/null && echo \"valid JSON\"",
                     ),
                     "label": 'Write the scoped cloud policy',
-                    "intro": 'You will now write the file report-policy.json yourself. The report app must be able to do one thing in the cloud: read (download) the files in the folder reports of the storage bucket named report-app-data. The report app must not be able to write a file, delete a file, read a file outside the folder reports, or use a star (*) in the action. The block below is the whole file with two gaps, the two values that start with WRITE. Type the block (do not paste it) and write your own value in place of each WRITE value. Example for a different job: a program that may only upload into the folder incoming of the bucket example-uploads has "Action": ["s3:PutObject"] and "Resource": "arn:aws:s3:::example-uploads/incoming/*". To fix a mistake, type the block again with the corrected value, which replaces the file. Give yourself about 10 minutes, and do not open the file in the reference folder yet.',
+                    "intro": 'You will now write the file report-policy.json yourself. The report app must be able to do one thing in the cloud: read (download) the files in the folder reports of the storage bucket named report-app-data. The report app must not be able to write a file, delete a file, read a file outside the folder reports, or use a star (*) in the action. The block below is the whole file with two gaps, the two values that start with WRITE. Type the block (do not paste it) and write your own value in place of each WRITE value. Example for a different job: a program that may only upload into the folder incoming of the bucket example-uploads has "Action": ["s3:PutObject"] and "Resource": "arn:aws:s3:::example-uploads/incoming/*". To fix a mistake, type the block again with the corrected value, which replaces the file. Give yourself about 10 minutes.',
                     "expect": 'Example only. You see this once the file is valid JSON; it says nothing yet about whether the policy is right.\nvalid JSON',
                     "lines": [
                         ("mkdir -p ... && cd ...", "Makes the module folder if it is missing and moves into it.", "Every block starts in the folder that holds its files, so it works on its own."),
@@ -697,24 +697,9 @@ MODULE = {
                         ("policy check: PASS", "Printed only when every answer matched.", "One line to read. The first run, with the WRITE values, prints FAIL, which shows the check can fail."),
                     ],
                 },
-                {
-                    "code": L(
-                        "cd /workspace/cps-3",
-                        "diff <(jq -S . report-policy.json) <(jq -S . reference/report-policy.reference.json) && echo \"same as the reference\" || echo \"differs from the reference\"",
-                    ),
-                    "label": 'Compare with the reference answer',
-                    "intro": 'You will now compare your policy with the reference answer that lab start placed in the reference folder. Compare with the reference only after your policy printed PASS, or after you tried for the full 10 minutes.',
-                    "expect": 'Example only. A correct policy can differ, for example in the Sid name; the simulation check decides whether yours is right.\nsame as the reference',
-                    "lines": [
-                        CDROW("where report-policy.json and the reference folder are."),
-                        ("jq -S .", "Prints each file as JSON with the keys sorted, so spacing and key order do not matter.", "Compares the meaning of the two policies, not how they were typed."),
-                        ("diff <(...) <(...)", "Shows any line that differs between the two printed policies. It prints nothing when they match.", "Shows exactly which part of your policy is different."),
-                        ("differs from the reference", "Printed when any line differs. Read the diff lines above it.", "The reference is only a model to learn from; the simulation check is the test."),
-                    ],
-                },
             ],
             "note": "An error that says Unable to locate credentials means the lab shell has no AWS keys loaded; load them as in earlier modules and run the block again. An AccessDenied error that names iam:SimulateCustomPolicy means your cloud identity lacks that one permission. Copy the command and the error and ask your AI assistant.",
-            "action": "Type the first block and write the two missing values, run the second block until it prints PASS, then run the third block.",
+            "action": "Type the first block and write the two missing values, then run the second block until it prints PASS.",
             "checkpoint": "The policy check prints PASS: the read of the report file is allowed, and the write, the delete and the read outside the reports folder are all implicitDeny.",
         },
     ],

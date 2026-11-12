@@ -226,11 +226,6 @@ RULE_SKELETON = r"""{
 
 HD_RULE = WORKD + "cat > rules/pod-exec.json <<'EOF'\n" + RULE_SKELETON + "\nEOF\ntest -s rules/pod-exec.json && echo ok || echo EMPTY\npython3 ci/check_rule.py rules/pod-exec.json"
 
-COMPARE_REF = (
-    WORKD +
-    "jq -r .expr /workspace/sdr-5/reference/pod-exec.json\n"
-    "jq -r .expr rules/pod-exec.json"
-)
 HD_RUNTESTS = WORKD + "cat > ci/run_tests.py <<'EOF'\n" + RUN_TESTS_PY + "\nEOF\nwc -l ci/run_tests.py"
 HD_DEPLOY = WORKD + "cat > ci/deploy.py <<'EOF'\n" + DEPLOY_PY + "\nEOF\nwc -l ci/deploy.py"
 HD_PIPELINE = WORKD + "cat > ci/pipeline.yaml <<'EOF'\n" + PIPELINE_YAML + "\nEOF\nwc -l ci/pipeline.yaml"
@@ -271,7 +266,7 @@ MODULE = {
     "unit_values_ok": [
         "5 minutes", "5 minute", "6 minute", "240 seconds", "60 seconds", "5 seconds", "1 minute", "15 minutes", "20 seconds", "4 hours", "10 minutes", "6 minutes",
     ],
-    "minutes": {"hands_on": 56, "verify": 19},
+    "minutes": {"hands_on": 53, "verify": 19},
     "tools": ["Gitea", "Tekton (OpenShift Pipelines)", "Grafana alerting (free, open source)", "Loki (free, open source)", "Mattermost", "OpenShift Container Platform", "oc", "tkn", "git", "curl", "jq", "python3"],
     "tool_why": True,
     "hide_draft": True,
@@ -636,19 +631,9 @@ MODULE = {
                         ("python3 ci/check_rule.py rules/pod-exec.json", "Applies your filters to the recorded events and compares the result with what you expected. It prints one line per case, then PASS or FAIL.", "It is a quick stand-in for Loki, so you find a mistake in seconds. The real test in Loki comes in Steps 2 and 4."),
                     ],
                 },
-                {
-                    "code": COMPARE_REF,
-                    "label": 'Compare with the reference answer (only after you tried)',
-                    "intro": 'You will now print the query of the reference answer, which lab start placed outside the repository, and then your own query. Run this only after you have tried the block above and the check has passed or ten minutes have gone. Different wording is fine if your check passed.',
-                    "expect": 'Example only. The first line is the reference answer; yours may differ in wording or order.\nsum(count_over_time({log_type="audit"} | json | objectRef_resource="pods" | objectRef_subresource="exec" | verb="create" | user_username!~"system:.*" [5m]))\n<your query>',
-                    "lines": [
-                        ("jq -r .expr /workspace/sdr-5/reference/pod-exec.json", "Prints the query of the reference answer without the JSON quoting.", "You compare your work with a known answer after you have tried, so you learn from the difference."),
-                        ("jq -r .expr rules/pod-exec.json", "Prints your own query the same way.", "The two lines are easy to read side by side."),
-                    ],
-                },
             ],
             "note": "After lab reset sdr-5, delete /workspace/sdr-5/detections first (this deletes your local work) and run the first block again, because the rebuilt repository no longer matches your old copy. If you are stuck after ten minutes, ask your AI assistant to explain the error, or copy /workspace/sdr-5/reference/pod-exec.json into rules/.",
-            "action": "Run the first block, read the pattern in the second, then write rules/pod-exec.json in the third until the check says PASS. Only then open the reference answer in the fourth.",
+            "action": "Run the first block, read the pattern in the second, then write rules/pod-exec.json in the third until the check says PASS. Only then open the reference answer with cat /workspace/sdr-5/reference/pod-exec.json.",
             "checkpoint": "The check prints PASS pod-exec looks right, and rules holds three .json files: pod-exec, priv-escalation and secret-read.",
         },
         {

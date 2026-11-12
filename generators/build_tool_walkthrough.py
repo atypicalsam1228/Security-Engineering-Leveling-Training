@@ -87,7 +87,7 @@ TOOLS = [
     {
         "name": "Mattermost",
         "role": "Team chat. Alerts from Grafana arrive in a channel, the way a real security team receives them.",
-        "modules": "SDR-2, SDR-5, AID-2, ENG-0",
+        "modules": "SDR-2, SDR-5, ENG-0",
         "pages": [
             ("The alert channel", "WALK-mattermost-alert.png",
              ["The title shows FIRING, the rule name and the severity.", "Labels name the control, the folder and where the rule came from.",

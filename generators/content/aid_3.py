@@ -12,14 +12,14 @@ MODULE = {
     "title": "AI-Assisted Automation Under Review",
     "draft": (
         "Run live on 2026-11-10 (see live-run/findings-AID-3.md). Confirmed: the Loki push and instant query endpoints with basic authentication through the lab gateway, the three drafted queries, the stub service tunnel, and Gitea branch protection (the bad pull request is refused with 405 and the good one merges after the ai-script-review status). "
-        "The first run of Step 4b failed three ways: tkn prompted for gate-image, git-clone did not trust the Gitea certificate, and an emptyDir workspace is not shared between the two tasks. The module now passes --use-param-defaults, supplies the lab CA bundle through the ssl-ca workspace and uses a claim template for the source workspace; the changed commands were not re-run end to end. "
+        "The first run of Step 3b failed three ways: tkn prompted for gate-image, git-clone did not trust the Gitea certificate, and an emptyDir workspace is not shared between the two tasks. The module now passes --use-param-defaults, supplies the lab CA bundle through the ssl-ca workspace and uses a claim template for the source workspace; the changed commands were not re-run end to end. "
         "A repository administrator can override branch protection, and the lab account is one, so the module proves the gate by the commit status. Test 3 must fail because of the bad script, not because the pipeline could not run. "
         "The review gate lives in a config map in project build, not in the repository, so the author of a script cannot weaken it. The model is a stub: its answers are fixed per request id and it never reads the prompt."
     ),
     "controls": ["SI-10", "AU-12", "CM-3", "SA-11"],
     "mentions": ["CM-5", "AU-3"],
     "unit_values_ok": ["300 characters", "10 seconds", "3 hours", "1 hour"],
-    "minutes": {"hands_on": 50, "verify": 22},
+    "minutes": {"hands_on": 48, "verify": 22},
     "tools": ["Python (python3)", "git", "Gitea (in-lab git server)", "OpenShift Pipelines (Tekton)", "Loki (free, open source)", "Stub model service (provided by the lab)", "oc", "tkn", "curl", "jq"],
     "tool_why": True,
     "hide_draft": True,
@@ -32,11 +32,10 @@ MODULE = {
             "per_step": True,
             "rankdir": "TB",
             "step_notes": {
-                1: "The lab starts with the stub model service in project ai-lab, Loki in project siem, and a repository on Gitea (project gitea) whose main branch needs a passing check. You clone that repository into your working copy and fetch the scan findings from the stub.",
-                2: "A shape check is added in your working copy. It accepts one exact reply shape and refuses everything else.",
-                3: "The summary script in your working copy sends the findings to the stub model service, applies the shape check to the reply, and sends a log record of every prompt, reply and rejection to Loki in project siem.",
-                4: "You push the branch add-summarizer to the repository on Gitea. You start the review gate, a pipeline in project build, on that branch. You then record its pass or fail result in Gitea against the commit from lab shell, and the pull request merges into the main branch only because the gate passed.",
-                5: "The stub model service drafts three LogQL queries. A query checker in your working copy refuses a draft with the wrong scope, runs the others against eight known sign-in events in Loki, and compares the result with the answer it already knows.",
+                1: "The lab starts with the stub model service in project ai-lab, Loki in project siem, and a repository on Gitea (project gitea) whose main branch needs a passing check. You clone that repository into your working copy and fetch the scan findings from the stub. A shape check is added in your working copy. It accepts one exact reply shape and refuses everything else.",
+                2: "The summary script in your working copy sends the findings to the stub model service, applies the shape check to the reply, and sends a log record of every prompt, reply and rejection to Loki in project siem.",
+                3: "You push the branch add-summarizer to the repository on Gitea. You start the review gate, a pipeline in project build, on that branch. You then record its pass or fail result in Gitea against the commit from lab shell, and the pull request merges into the main branch only because the gate passed.",
+                4: "The stub model service drafts three LogQL queries. A query checker in your working copy refuses a draft with the wrong scope, runs the others against eight known sign-in events in Loki, and compares the result with the answer it already knows.",
             },
             "zones": [
                 {"id": "shell", "label": "Lab shell, your working copy (a container on your computer)", "kind": "boundary"},
@@ -51,27 +50,27 @@ MODULE = {
                 {"id": "stub", "icon": "brands/python", "title": "Stub model service", "sub": "Python service in project ai-lab, fixed answers", "zone": "ailab"},
                 {"id": "loki", "icon": "brands/loki", "title": "Loki (the log store)", "sub": "Holds the prompt and reply records", "zone": "siem"},
                 {"id": "findings", "icon": "brands/json", "title": "Scan findings file", "sub": "JSON file findings.json", "zone": "shell", "s": 1},
-                {"id": "draft", "title": "Drafted queries", "sub": "Three LogQL query files", "zone": "shell", "s": 5},
-                {"id": "checker", "icon": "brands/python", "title": "Query checker", "sub": "Python script check_query.py", "zone": "shell", "kind": "warn", "s": 5},
-                {"id": "fixture", "icon": "brands/loki", "title": "Known sign-in events", "sub": "Eight events in Loki, app ai-fixture", "zone": "siem", "s": 5},
-                {"id": "shape", "icon": "brands/python", "title": "Shape check", "sub": "Python module shape.py, one accepted shape", "zone": "shell", "kind": "warn", "s": 2},
-                {"id": "script", "icon": "brands/python", "title": "Summary script", "sub": "Python script summarize.py, calls the model", "zone": "shell", "s": 3},
-                {"id": "gate", "icon": "brands/tekton", "title": "Review gate", "sub": "Tekton pipeline ai-script-review", "zone": "build", "kind": "warn", "s": 4},
-                {"id": "pr", "icon": "brands/gitea", "title": "Pull request", "sub": "Gitea pull request, branch add-summarizer", "zone": "gitea", "s": 4},
+                {"id": "draft", "title": "Drafted queries", "sub": "Three LogQL query files", "zone": "shell", "s": 4},
+                {"id": "checker", "icon": "brands/python", "title": "Query checker", "sub": "Python script check_query.py", "zone": "shell", "kind": "warn", "s": 4},
+                {"id": "fixture", "icon": "brands/loki", "title": "Known sign-in events", "sub": "Eight events in Loki, app ai-fixture", "zone": "siem", "s": 4},
+                {"id": "shape", "icon": "brands/python", "title": "Shape check", "sub": "Python module shape.py, one accepted shape", "zone": "shell", "kind": "warn", "s": 1},
+                {"id": "script", "icon": "brands/python", "title": "Summary script", "sub": "Python script summarize.py, calls the model", "zone": "shell", "s": 2},
+                {"id": "gate", "icon": "brands/tekton", "title": "Review gate", "sub": "Tekton pipeline ai-script-review", "zone": "build", "kind": "warn", "s": 3},
+                {"id": "pr", "icon": "brands/gitea", "title": "Pull request", "sub": "Gitea pull request, branch add-summarizer", "zone": "gitea", "s": 3},
                 {"id": "main", "icon": "brands/gitea", "title": "Main branch (protected)", "sub": "Gitea branch that needs a passing status", "zone": "gitea", "kind": "ok"},
             ],
             "edges": [
                 {"a": "stub", "b": "findings", "label": "Supplies, through a port forward", "s": 1},
-                {"a": "findings", "b": "script", "label": "Read by", "s": 3},
-                {"a": "script", "b": "stub", "label": "Asks", "s": 3},
-                {"a": "script", "b": "shape", "label": "Checked by", "kind": "warn", "s": 3},
-                {"a": "script", "b": "loki", "label": "Logs to", "s": 3},
-                {"a": "script", "b": "pr", "label": "Pushed as", "s": 4},
-                {"a": "gate", "b": "pr", "label": "Checks the branch; you post the result", "kind": "warn", "s": 4},
-                {"a": "pr", "b": "main", "label": "Merges into", "kind": "ok", "s": 4},
-                {"a": "stub", "b": "draft", "label": "Drafts", "s": 5},
-                {"a": "draft", "b": "checker", "label": "Checked by", "kind": "warn", "s": 5},
-                {"a": "checker", "b": "fixture", "label": "Compares with", "kind": "warn", "s": 5},
+                {"a": "findings", "b": "script", "label": "Read by", "s": 2},
+                {"a": "script", "b": "stub", "label": "Asks", "s": 2},
+                {"a": "script", "b": "shape", "label": "Checked by", "kind": "warn", "s": 2},
+                {"a": "script", "b": "loki", "label": "Logs to", "s": 2},
+                {"a": "script", "b": "pr", "label": "Pushed as", "s": 3},
+                {"a": "gate", "b": "pr", "label": "Checks the branch; you post the result", "kind": "warn", "s": 3},
+                {"a": "pr", "b": "main", "label": "Merges into", "kind": "ok", "s": 3},
+                {"a": "stub", "b": "draft", "label": "Drafts", "s": 4},
+                {"a": "draft", "b": "checker", "label": "Checked by", "kind": "warn", "s": 4},
+                {"a": "checker", "b": "fixture", "label": "Compares with", "kind": "warn", "s": 4},
             ],
             "why_built": (
                 "You work in lab shell on your laptop, in a working copy of a repository, as in ENG-0. "
@@ -142,7 +141,7 @@ MODULE = {
             "plain": "Check that inputs to the system are valid before they are used.",
             "source": "NIST",
             "tool": "shape.py and summarize.py, run with python3. Explained in section 2.1.",
-            "covered": "Section 3, Steps 2 and 3: accept one exact reply shape from the model and refuse the rest. Section 3, Step 5: refuse a drafted query whose scope is wrong before it runs. Section 4, Test 2: five bad replies are refused. Section 4, Test 4: a too-wide query is refused.",
+            "covered": "Section 3, Steps 1 and 2: accept one exact reply shape from the model and refuse the rest. Section 3, Step 4: refuse a drafted query whose scope is wrong before it runs. Section 4, Test 2: five bad replies are refused. Section 4, Test 4: a too-wide query is refused.",
             "cite": [
                 {"file": NIST, "quote": "Check the validity of the following information inputs"},
             ],
@@ -152,7 +151,7 @@ MODULE = {
             "plain": "The system produces audit records for the events it is meant to record.",
             "source": "NIST",
             "tool": "`ailog.py`, which sends each record to Loki (the log store in your lab cluster). Explained in section 2.1.",
-            "covered": "Section 3, Step 3: log each prompt (the question sent to the model), each reply and each rejection to Loki. Section 4, Test 1: find the records. Section 4, Test 2: find the rejected records.",
+            "covered": "Section 3, Step 2: log each prompt (the question sent to the model), each reply and each rejection to Loki. Section 4, Test 1: find the records. Section 4, Test 2: find the rejected records.",
             "cite": [
                 {"file": NIST, "quote": "Provide audit record generation capability for the event types the system is capable of"},
             ],
@@ -162,7 +161,7 @@ MODULE = {
             "plain": "Review each proposed change and approve or refuse it before it is made.",
             "source": "NIST",
             "tool": "The review gate pipeline ai-script-review (OpenShift Pipelines) and the protected main branch on Gitea. Explained in section 2.2.",
-            "covered": "Section 3, Step 4: run the review gate on the branch and merge it into main only on a pass. Section 4, Test 3: a bad branch fails the gate.",
+            "covered": "Section 3, Step 3: run the review gate on the branch and merge it into main only on a pass. Section 4, Test 3: a bad branch fails the gate.",
             "cite": [
                 {"file": NIST, "quote": "Review proposed configuration-controlled changes to the system and approve or disapprove"},
                 {"file": NIST, "quote": "Document configuration change decisions associated with the system"},
@@ -173,7 +172,7 @@ MODULE = {
             "plain": "Whoever writes the code tests it and keeps the results, and the flaws found are corrected.",
             "source": "NIST",
             "tool": "check_query.py (python3), seed_fixture.py and Loki. Explained in section 2.3.",
-            "covered": "Section 3, Step 5: test a query the model drafted against eight known sign-in events and compare the result with the answer known in advance. Section 4, Test 4: a query that finds nothing fails the test.",
+            "covered": "Section 3, Step 4: test a query the model drafted against eight known sign-in events and compare the result with the answer known in advance. Section 4, Test 4: a query that finds nothing fails the test.",
             "cite": [
                 {"file": NIST, "quote": "Produce evidence of the execution of the assessment plan and the results of the testing and evaluation"},
                 {"file": NIST, "quote": "Correct flaws identified during testing and evaluation"},
@@ -189,7 +188,7 @@ MODULE = {
             "evidence": "The written shape, the tests that feed it bad answers, and a record of the rejections.",
             "sufficient": "The accepted shape is narrow and written as code: the fields, their types, the allowed values and a size limit. Everything else is refused, not repaired. NIST leaves the list of inputs to check to the organization. The lab checks the model reply and the count it reports.",
             "tieoff": "A rejected answer is logged, and the script stops with a failure status that a person or a schedule can see.",
-            "tool": "shape.py (Step 2) accepts only a JSON object (a plain-text data format of names and values) with three named fields, and summarize.py (Step 3) also compares the count in the reply with the number of findings it sent.",
+            "tool": "shape.py (Step 1) accepts only a JSON object (a plain-text data format of names and values) with three named fields, and summarize.py (Step 2) also compares the count in the reply with the number of findings it sent.",
         },
         {
             "control": "AU-12 Audit Record Generation",
@@ -199,7 +198,7 @@ MODULE = {
             "evidence": "Log entries for each prompt, each reply and each rejection, in the same store as the other logs.",
             "sufficient": "Each exchange is logged before the script acts on it, in the central log store, with a request id (a short name sent with each question) that ties the three records together. Logs that hold prompts can hold sensitive text, so what is sent to a model is chosen with that in mind.",
             "tieoff": "Someone can search the exchanges. In the lab that is a search in Loki.",
-            "tool": "`ailog.py` (Step 3) sends one record per event to Loki with the labels (name and value tags) app and kind.",
+            "tool": "`ailog.py` (Step 2) sends one record per event to Loki with the labels (name and value tags) app and kind.",
         },
         {
             "control": "CM-3 Configuration Change Control",
@@ -219,7 +218,7 @@ MODULE = {
             "evidence": "The known events, the expected counts worked out without the query, and the checker output for each draft.",
             "sufficient": "Each drafted query is tested on data whose right answer is known first, and only an exact match passes. A query that returns nothing fails when the known data holds events it should have found. NIST leaves the kinds of testing, how often and the depth to the organization. The lab uses one fixture of eight events.",
             "tieoff": "A failed draft goes back to whoever asked for it, and it is not used until it is corrected and checked again.",
-            "tool": "check_query.py (Step 5) compares the result of the query with counts computed from fixture.json, and Test 4 shows a draft that finds nothing failing.",
+            "tool": "check_query.py (Step 4) compares the result of the query with counts computed from fixture.json, and Test 4 shows a draft that finds nothing failing.",
         },
     ],
     "terms": [
@@ -376,10 +375,13 @@ MODULE = {
     ],
     "steps": [
         {
-            "title": "Reach the model and clone the repository",
-            "learn": "Opening a tunnel to the stub model service, fetching its three scan findings and cloning the repository gives you a working copy and the data the summary script will summarize.",
-            "takeaway": "Work on a branch from the start, because the main branch merges only through a reviewed pull request.",
-            "why": "The stub is only reachable through a port forward. The main branch accepts changes only through a reviewed pull request, so the work starts on a branch.",
+            "title": "Set up, then review a drafted shape check and write the test that catches its flaw",
+            "learn": "Cloning the repository and fetching the stub's scan findings gives you a working copy and data to summarize. Then writing a test for a bad input, watching it fail against the assistant-drafted shape check and fixing the flaw it finds proves the check refuses what it should.",
+            "takeaway": "A draft that reads well can still be wrong, so write the test before you trust the draft.",
+            "controls": [
+                {"id": 'SI-10 Information Input Validation', "how": 'You test the assistant-drafted shape check with a bad reply, find a flaw and fix it.'},
+            ],
+            "why": "The stub is only reachable through a port forward, and the main branch accepts changes only through a reviewed pull request, so the work starts on a branch. An AI assistant wrote the shape check from a written specification. You paste the shape check as it came, paste four tests, write the fifth test yourself, and read what the test tells you. The review gate in Step 3 requires the tests.",
             "blocks": [
                 {
                     "code": (
@@ -407,23 +409,10 @@ MODULE = {
                         ("git checkout -B add-summarizer", "Starts the branch for this work, or switches to it if it already exists.", "Main accepts changes only through a reviewed pull request, so you do the work on a branch."),
                         ("-d '{\"request_id\": \"findings-1\"}'", "Asks the stub for its stored scan findings. The id picks the fixed answer.", "The summary script needs something to summarize, and the stub holds a fixed list of scan findings for it."),
                         ("jq -r .reply | jq . > findings.json", "Takes the reply text out of the answer, formats it, and saves it as a file.", "The findings arrive wrapped in the stub's answer, and you need them as a plain file the script can read."),
-                        ("jq length findings.json", "Counts the findings. You will compare this number with what the model reports.", "Step 3 compares the model's count with this number."),
+                        ("jq length findings.json", "Counts the findings. You will compare this number with what the model reports.", "Step 2 compares the model's count with this number."),
                         ("git branch --show-current", "Prints the name of the branch you are on.", "It confirms the work happens on the branch and not on main."),
                     ],
-                }
-            ],
-            "action": "Run the block.",
-            "checkpoint": "The count is 3, and the last line says add-summarizer.",
-        },
-        {
-            "title": "Review a drafted shape check and write the test that catches its flaw",
-            "learn": "Writing a test for a bad input, watching it fail against the assistant-drafted shape check and fixing the flaw it finds proves the check refuses what it should.",
-            "takeaway": "A draft that reads well can still be wrong, so write the test before you trust the draft.",
-            "controls": [
-                {"id": 'SI-10 Information Input Validation', "how": 'You test the assistant-drafted shape check with a bad reply, find a flaw and fix it.'},
-            ],
-            "why": "An AI assistant wrote the shape check from a written specification. You paste the shape check as it came, paste four tests, write the fifth test yourself, and read what the test tells you. The review gate in Step 4 requires the tests.",
-            "blocks": [
+                },
                 {
                     "code": (
                         WORK
@@ -457,7 +446,7 @@ MODULE = {
                     "intro": 'You will now make the file shape.py in the ai-tools folder by pasting the whole block (a heredoc) into the lab shell. The file holds the AI-drafted check, exactly as it came. The quoted EOF keeps every character exactly as shown, including the spaces at the start of lines, which Python needs. The command prints ok when shape.py has content.',
                     "expect": 'Example only.\nok',
                     "lines": [
-                        ("cd /workspace/aid-3/ai-tools", "Moves into the repository folder from Step 1.", "The file is made in the folder you are standing in."),
+                        ("cd /workspace/aid-3/ai-tools", "Moves into the repository folder cloned in the first block of this step.", "The file is made in the folder you are standing in."),
                         ("cat > shape.py <<'EOF' ... EOF", "Writes everything between the first and the last line into shape.py. The quotes around EOF stop the shell from changing any character. Running it again replaces the file with the same text.", "This is how you make a file with only a paste, since the lab has no editor."),
                         ("test -s shape.py && echo ok || echo EMPTY", "Prints ok if the file has content and EMPTY if it has none.", "Pasting the block twice can leave the file empty. If EMPTY shows, paste the block again."),
                         ("FIELDS = {...}", "The only fields allowed and the type of each.", "Spelling out the allowed fields in advance is what lets the check refuse everything else."),
@@ -514,7 +503,7 @@ MODULE = {
                         ("GOOD, variant()", "One good reply, and a helper that makes a copy of it with one thing changed.", "Each test starts from one good reply and changes one thing, so a failure points at that one thing."),
                         ("test_accepts_a_good_reply", "The check must not refuse a correct reply. A check that refuses everything is useless.", "Without this test, a check that refuses everything would pass all the others."),
                         ("assertRaises(ValueError)", "The test passes only if the check refuses the reply.", "The test passes only when the check refuses, which is the behavior you are proving."),
-                        ("test_rejects_...", "One test for each of three shape problems the stub sends: prose, an extra field and a bad value. The long summary is checked end to end in Test 2, and the wrong count is caught in Step 3 by the cross-check, not by the shape check.", "Together with your test, these show the check refuses the main kinds of bad reply, and the review gate later requires at least four that expect a refusal."),
+                        ("test_rejects_...", "One test for each of three shape problems the stub sends: prose, an extra field and a bad value. The long summary is checked end to end in Test 2, and the wrong count is caught in Step 2 by the cross-check, not by the shape check.", "Together with your test, these show the check refuses the main kinds of bad reply, and the review gate later requires at least four that expect a refusal."),
                     ],
                 },
                 {
@@ -585,15 +574,15 @@ MODULE = {
                     ),
                     "label": 'Compare with the reference answer (only after you have tried)',
                     "intro": 'You will now print the reference text stored on the cluster: the two lines of the test, and the flaw with its fix. Do not open the reference answer until you have tried the test and the fix. Compare the reference text with what you wrote.',
-                    "expect": 'Example only. The text is fixed.\nReference answer for AID-3 Step 2. Open it only after you have tried.\n(the two lines of the test)\n(the flaw in the drafted check, and the fixed line)',
+                    "expect": 'Example only. The text is fixed.\nReference answer for the AID-3 shape test. Open it only after you have tried.\n(the two lines of the test)\n(the flaw in the drafted check, and the fixed line)',
                     "lines": [
                         ("oc get configmap aid3-reference -n build -o jsonpath=...", "Prints one stored file from the config map aid3-reference in project build. The lab start created it.", "The answer sits outside your working copy, so you cannot open it by accident while you work."),
                     ],
                 },
             ],
             "tip": "Both files you paste can be pasted again safely. To redo your test, paste the block that starts test_boolean.py again before you add your lines.",
-            "action": "Paste shape.py and the four tests, write the fifth test, watch it fail, fix shape.py, and open the reference answer last.",
-            "checkpoint": "Before the fix, four tests pass and yours fails with ValueError not raised. After the fix, five tests run and the last line is OK.",
+            "action": "Run the setup block, paste shape.py and the four tests, write the fifth test, watch it fail, fix shape.py, and open the reference answer last.",
+            "checkpoint": "The findings count is 3 and the branch is add-summarizer. Before the fix, four tests pass and yours fails with ValueError not raised. After the fix, five tests run and the last line is OK.",
         },
         {
             "title": "Write the summary script and log every exchange",
@@ -649,15 +638,15 @@ MODULE = {
                         "        return json.loads(response.read().decode(\"utf-8\"))"
                     ),
                     "label": 'Read ailog.py',
-                    "intro": 'You will now read the file `ailog.py`, which came with the repository you cloned. You do not type `ailog.py`, and reading it prints nothing. To see the same file in lab shell, type cd /workspace/aid-3/ai-tools and then cat `ailog.py`. Step 5 uses the query function in ailog.py.',
-                    "look_for": ['loki_access() builds the sign-in header and the certificate check once, so push() and query() cannot send a request without them.', 'post() sends one JSON request and gives up after 10 seconds, so a stuck server cannot hang the script.', 'push() sends one record with the labels you give it. log_event() calls it with the labels app and kind, and those two are what you search by in Loki.', 'query() asks Loki one question at one moment (an instant query) and returns the answer as data. Step 5 uses it.', 'The login and the certificate file come from lab variables (os.environ), so no password is written in the file. A missing lab variable stops the script with an error, and no unauthenticated request is sent.'],
+                    "intro": 'You will now read the file `ailog.py`, which came with the repository you cloned. You do not type `ailog.py`, and reading it prints nothing. To see the same file in lab shell, type cd /workspace/aid-3/ai-tools and then cat `ailog.py`. Step 4 uses the query function in ailog.py.',
+                    "look_for": ['loki_access() builds the sign-in header and the certificate check once, so push() and query() cannot send a request without them.', 'post() sends one JSON request and gives up after 10 seconds, so a stuck server cannot hang the script.', 'push() sends one record with the labels you give it. log_event() calls it with the labels app and kind, and those two are what you search by in Loki.', 'query() asks Loki one question at one moment (an instant query) and returns the answer as data. Step 4 uses it.', 'The login and the certificate file come from lab variables (os.environ), so no password is written in the file. A missing lab variable stops the script with an error, and no unauthenticated request is sent.'],
                     "lines": [
                         ("loki_access()", "Reads the sign-in from lab variables (named values the lab sets for you) and builds the certificate check. No password appears in the file, and a missing variable stops the script with an error instead of sending an unauthenticated request.", "Reading the sign-in from lab variables keeps passwords out of the file you commit, and one function keeps every request on the same footing."),
                         ("`cafile=os.environ[\"LOKI_CA_FILE\"]`", "Checks that the server is the real Loki, using the lab's certificate file.", "A certificate check makes sure the records go to the real Loki and not to something pretending to be it."),
                         ("post(...)", "Sends one JSON request and returns the text of the answer. It gives up after 10 seconds instead of waiting forever.", "One small function sends every request the same way, with a time limit so a stuck server cannot hang the script."),
                         ("push(labels, line)", "Sends one record to Loki with the labels you pass in and its own timestamp in nanoseconds, which is what Loki expects.", "Loki orders records by their time, so each record needs its own, and the labels are how you find the record again."),
                         ("log_event(kind, request_id, text)", "Writes one record: what kind of event, which request, and the text. Only app and kind are labels, so a search by app and kind is fast.", "Every exchange goes through one function, so no event can be logged in a different way or forgotten."),
-                        ("query(expr)", "Sends one LogQL query to Loki as an instant query and returns the answer as data.", "The checker in Step 5 needs to ask Loki a question from code, and reusing this file keeps the sign-in and certificate handling in one place."),
+                        ("query(expr)", "Sends one LogQL query to Loki as an instant query and returns the answer as data.", "The checker in Step 4 needs to ask Loki a question from code, and reusing this file keeps the sign-in and certificate handling in one place."),
                     ],
                 },
                 {
@@ -983,7 +972,7 @@ MODULE = {
             "controls": [
                 {"id": 'AU-12 Audit Record Generation', "how": 'Finding both the prompt and the reply in Loki by request id proves someone can later say what was asked and what came back.'},
             ],
-            "why": "Search Loki for the records of the Step 3 good run by request id, over the last 3 hours. If the prompt and the reply are both there, someone can later answer what was asked and what came back.",
+            "why": "Search Loki for the records of the Step 2 good run by request id, over the last 3 hours. If the prompt and the reply are both there, someone can later answer what was asked and what came back.",
             "code": (
                 "curl -sG --cacert \"$LOKI_CA_FILE\" -u \"$LOKI_USER:$LOKI_PASSWORD\" \\\n"
                 "  \"$LOKI_URL/loki/api/v1/query_range\" \\\n"
@@ -1098,7 +1087,7 @@ MODULE = {
                 {"id": 'SI-10 Information Input Validation', "how": 'The wide draft names every app and a long range, and the checker refuses it before any request reaches Loki, printing a reason for each problem.'},
                 {"id": 'SA-11 Developer Testing and Evaluation', "how": 'The draft with a wrong event value is a valid query that finds nothing, and the known data shows it missed four failed sign-ins. Reading the query alone would not have caught that.'},
             ],
-            "why": "Run the checker on all three drafts side by side. The good draft must still pass, so you know the checker is not refusing everything. The draft with a wrong event value is a valid query, and Loki accepts it and answers with nothing. The wide draft is refused before it runs. Run this within an hour of Step 5, while the eight events are still in the last hour.",
+            "why": "Run the checker on all three drafts side by side. The good draft must still pass, so you know the checker is not refusing everything. The draft with a wrong event value is a valid query, and Loki accepts it and answers with nothing. The wide draft is refused before it runs. Run this within an hour of Step 4, while the eight events are still in the last hour.",
             "code": (
                 "cd /workspace/aid-3/ai-tools\n"
                 "for id in good wrongfield wide; do\n"

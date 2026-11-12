@@ -2,7 +2,7 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 28 of 29 in the recommended order |
+| Sequence | Module 31 of 32 in the recommended order |
 | Timed work | About 75 minutes (55 hands-on, 20 verify) |
 | Standalone start | `lab start aid-5` |
 | Combined start | Continue from the end state of the previous module |

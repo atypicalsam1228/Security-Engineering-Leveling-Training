@@ -5,6 +5,15 @@ NIST = "nist-sp-800-53r5-full.md"
 GRAFANA_AUTH = '-u "$GRAFANA_USER:$GRAFANA_PASSWORD"'
 LOKI_CALL = 'curl -sG --cacert "$LOKI_CA_FILE" -u "$LOKI_USER:$LOKI_PASSWORD"'
 
+SECRET_START = 'sum(count_over_time({lab_seed="sdr-3", seed_run="RUNID", log_type="audit"} | json | user_username="lab-user7" [6h]))'
+HD_SECRET_START = "cd /workspace/sdr-3\ncat > secret-reads.logql <<'EOF'\n" + SECRET_START + "\nEOF\nwc -l secret-reads.logql"
+CHECK_SECRET = (
+    "cd /workspace/sdr-3\n"
+    "RUN=$(oc get configmap sdr-review -n siem -o jsonpath='{.data.anchor\\.txt}')\n"
+    "COUNT=$(" + LOKI_CALL + " \"$LOKI_URL/loki/api/v1/query\" --data-urlencode \"query=$(sed \"s/RUNID/$RUN/\" secret-reads.logql)\" | jq -r '.data.result[0].value[1]')\n"
+    "echo \"$COUNT\" | grep -qx 4 && echo 'ok: 4 secret reads' || echo \"not yet right: your search counted $COUNT\""
+)
+
 MODULE = {
     "intent_at_end": True,
     "terms_at_end": True,
@@ -25,7 +34,7 @@ MODULE = {
         "5 minutes", "6 hours", "4 hours", "1 hour", "1 minute", "2 minutes", "3 minutes", "10 minutes", "15 minutes", "60 seconds", "30 seconds",
         "5 minute", "6 hour", "4 hour", "0 minutes",
     ],
-    "minutes": {"hands_on": 50, "verify": 19},
+    "minutes": {"hands_on": 49, "verify": 19},
     "tools": ["Loki LogQL (free, open source)", "Grafana alerting and dashboards (free, open source)", "OpenShift Container Platform", "oc", "curl", "jq", "python3"],
     "tool_why": True,
     "hide_draft": True,
@@ -34,15 +43,14 @@ MODULE = {
         {
             "id": "tune",
             "title": "From one noisy rule to a tuned rule that a gate checks",
-            "caption": "You search the stored records in Loki (the log store) to understand the incident. You read the counts to choose a threshold (the count above which a rule fires). You change the alert rule (a saved search plus a limit) and the dashboard panel (one chart on a Grafana dashboard) in Grafana. A review gate (an automated check that passes or fails the work) then replays recorded events (sends them through Loki again) against the result. Each step below adds one part, drawn with thick lines. The lab (test) setup runs the gate by hand, while in production the rule would sit in version control and the gate would run on every change to it.",
+            "caption": "You search the stored records in Loki (the log store) to understand the incident. You set a threshold (the count above which a rule fires). You change the alert rule (a saved search plus a limit) and the dashboard panel (one chart on a Grafana dashboard) in Grafana. A review gate (an automated check that passes or fails the work) then replays recorded events (sends them through Loki again) against the result. Each step below adds one part, drawn with thick lines. The lab (test) setup runs the gate by hand, while in production the rule would sit in version control and the gate would run on every change to it.",
             "per_step": True,
             "rankdir": "TB",
             "step_notes": {
                 1: "You search the sign-in records in Loki from lab shell and separate steady noise (harmless failures that happen all day) from two bursts.",
                 2: "You follow the compromised account into the audit records in Loki and write your facts to the file findings.json in lab shell.",
-                3: "You read the five-minute counts over six hours from Loki and pick a threshold between the noise and the weakest real burst.",
-                4: "You send the new threshold to the alert rule and to the dashboard panel in Grafana, so both show the same number.",
-                5: "The review gate in lab shell replays recorded events into Loki, reads the rule and the panel from Grafana, and checks your findings.json.",
+                3: "You send the new threshold to the alert rule and to the dashboard panel in Grafana, so both show the same number.",
+                4: "The review gate in lab shell replays recorded events into Loki, reads the rule and the panel from Grafana, and checks your findings.json.",
             },
             "zones": [
                 {"id": "cluster", "icon": "aws/group-AWS-Cloud", "label": "Your cluster (your OpenShift cluster, in AWS)", "kind": "boundary"},
@@ -56,18 +64,17 @@ MODULE = {
                 {"id": "rule", "title": "Alert rule (in Grafana)", "sub": "Rule failed-login-burst: count above a threshold", "zone": "graf", "kind": "warn"},
                 {"id": "panel", "title": "Dashboard panel (in Grafana)", "sub": "Panel on dashboard sdr-auth-overview with a threshold line", "zone": "graf", "kind": "warn"},
                 {"id": "find", "icon": "brands/json", "title": "Findings file", "sub": "JSON file findings.json with six facts", "zone": "shell", "s": 2},
-                {"id": "thr", "title": "Chosen threshold", "sub": "A number you pick from the counts", "zone": "shell", "s": 3},
-                {"id": "gate", "icon": "brands/python", "title": "Review gate", "sub": "Python script review_gate.py, from config map sdr-review", "zone": "shell", "kind": "ok", "s": 5},
+                {"id": "thr", "title": "Chosen threshold", "sub": "The number 6, set once in a variable", "zone": "shell", "s": 3},
+                {"id": "gate", "icon": "brands/python", "title": "Review gate", "sub": "Python script review_gate.py, from config map sdr-review", "zone": "shell", "kind": "ok", "s": 4},
             ],
             "edges": [
                 {"a": "loki", "b": "rule", "label": "Searched by", "kind": "warn", "flat": True},
                 {"a": "loki", "b": "find", "label": "Facts read from", "s": 2},
-                {"a": "loki", "b": "thr", "label": "Counts read from", "s": 3},
-                {"a": "thr", "b": "rule", "label": "Applied to rule", "kind": "warn", "s": 4},
-                {"a": "thr", "b": "panel", "label": "Applied to panel", "kind": "warn", "s": 4},
-                {"a": "find", "b": "gate", "label": "Checked by", "kind": "ok", "flat": True, "s": 5},
-                {"a": "gate", "b": "loki", "label": "Replays events into", "kind": "ok", "s": 5},
-                {"a": "gate", "b": "rule", "label": "Reads rule and panel", "kind": "ok", "s": 5},
+                {"a": "thr", "b": "rule", "label": "Applied to rule", "kind": "warn", "s": 3},
+                {"a": "thr", "b": "panel", "label": "Applied to panel", "kind": "warn", "s": 3},
+                {"a": "find", "b": "gate", "label": "Checked by", "kind": "ok", "flat": True, "s": 4},
+                {"a": "gate", "b": "loki", "label": "Replays events into", "kind": "ok", "s": 4},
+                {"a": "gate", "b": "rule", "label": "Reads rule and panel", "kind": "ok", "s": 4},
             ],
             "why_built": (
                 "You work in lab shell on your computer. Every search, change and check you run there reaches the cluster over the network with the lab variables (named values the lab sets for you), so no password is typed. "
@@ -89,7 +96,7 @@ MODULE = {
                 "2. Alert rule (in Grafana): the rule failed-login-burst, which fires when the failed sign-in count over 5 minutes is above its threshold.",
                 "3. Dashboard panel (in Grafana): the chart on dashboard sdr-auth-overview that draws the same count with a red threshold line.",
                 "4. Findings file: findings.json in lab shell, holding your six facts about the incident.",
-                "5. Chosen threshold: the number you pick from the counts and apply to the rule and to the panel.",
+                "5. Chosen threshold: the number 6, set once in a variable and applied to the rule and to the panel.",
                 "6. Review gate: review_gate.py, supplied by the lab, which checks your findings, the rule and the panel, and replays recorded events against the rule.",
                 "7. Grafana (alerts and dashboards): a free tool that runs alert rules and draws dashboards; the rule and the panel live in it.",
                 "8. Project siem: the section of the cluster where Loki and Grafana run.",
@@ -107,7 +114,7 @@ MODULE = {
         "env": ["LOKI_URL", "LOKI_CA_FILE", "LOKI_USER", "LOKI_PASSWORD", "GRAFANA_URL", "GRAFANA_USER", "GRAFANA_PASSWORD"],
     },
     "objectives": [
-        {"label": "Skill", "text": "Investigate a security incident in logs with your own searches and choose an alert threshold from the data. Apply it to a live alert rule and dashboard panel, and prove the result with a replay."},
+        {"label": "Skill", "text": "Investigate a security incident in logs with your own searches and set an alert threshold between the noise and the real bursts. Apply it to a live alert rule and dashboard panel, and prove the result with a replay."},
         {"label": "Tools", "text": "Loki LogQL searches the stored sign-in and audit records. Grafana holds the alert rule and the dashboard panel you change. curl and jq call the Grafana API and read the answers. oc copies the review gate from the cluster, and Python runs the gate."},
         {"label": "Security Function", "text": "Detects attacks and keeps detection usable. The tuned rule stops firing on harmless noise but still fires on both real bursts, and a replay of recorded events proves it."},
         {"label": "NIST SI-4 System Monitoring", "text": "Loki searches and the Grafana alert rule failed-login-burst analyze the detected events, and you adjust the rule threshold and the dashboard panel to match what you found."},
@@ -130,7 +137,7 @@ MODULE = {
             "plain": "Analyze what monitoring detects, and adjust the monitoring when risk changes.",
             "source": "NIST",
             "tool": "Loki searches, the Grafana alert rule failed-login-burst and its dashboard panel. Explained in sections 2.1 and 2.2.",
-            "covered": "Section 3, Steps 1 to 4: you analyze the detected events and adjust the rule that detects them. Section 3, Step 5, and Section 4, Tests 1 and 2: the replay shows the rule still fires on real events.",
+            "covered": "Section 3, Steps 1 to 3: you analyze the detected events and adjust the rule that detects them. Section 3, Step 4, and Section 4, Tests 1 and 2: the replay shows the rule still fires on real events.",
             "cite": [
                 {"file": NIST, "quote": "Analyze detected events and anomalies"},
                 {"file": NIST, "quote": "Adjust the level of system monitoring activity when there is a change in risk"},
@@ -151,7 +158,7 @@ MODULE = {
             "plain": "Handle an incident through detection and analysis, and keep the results comparable and predictable.",
             "source": "NIST",
             "tool": "The file findings.json and the review gate (review_gate.py). Explained in section 2.2.",
-            "covered": "Section 3, Steps 1 and 2: the detection and analysis phase. Section 3, Step 5: the review gate makes the result checkable.",
+            "covered": "Section 3, Steps 1 and 2: the detection and analysis phase. Section 3, Step 4: the review gate makes the result checkable.",
             "cite": [
                 {"file": NIST, "quote": "includes preparation, detection and analysis, containment, eradication, and recovery"},
                 {"file": NIST, "quote": "Coordinate incident handling activities with contingency planning activities"},
@@ -382,13 +389,37 @@ MODULE = {
                     ],
                 },
                 {
+                    "lang": "bash",
+                    "code": HD_SECRET_START,
+                    "label": 'Your turn: write the secret-read count',
+                    "intro": 'You will now write a starter search into the file secret-reads.logql. It counts every request the account made, not only reads of secrets. Run the block once so the file exists. Then write the finished search yourself from the note below this block by running the same command again with your own line.',
+                    "expect": 'Example only.\n1 secret-reads.logql',
+                    "lines": [
+                        ("cat > secret-reads.logql <<'EOF' ... EOF", "Writes the line between the first line and EOF into the file. Running the command again with a different line replaces the file.", "This is how you edit without an editor: write the whole file again."),
+                        ("seed_run=\"RUNID\"", "A marker for the run number. The next blocks put the real number in place of RUNID.", "The run number differs on every lab start, so the file holds a marker and not a fixed number."),
+                        ("| user_username=\"lab-user7\"", "Keeps the requests made by the taken-over account. This part is already right.", "The impact you state is about this one account."),
+                        ("[6h]", "Counts over the last 6 hours, the same window as the other facts.", "The incident began earlier than the default window of 1 hour."),
+                    ],
+                },
+                {
+                    "code": CHECK_SECRET,
+                    "label": 'Check your secret-read count',
+                    "intro": 'You will now run your search against Loki. Run the check again after every change to secret-reads.logql.',
+                    "expect": 'Example only. When your search is right:\nok: 4 secret reads\n(when it is not, the line "not yet right:" and the number your search counted)',
+                    "lines": [
+                        ("sed \"s/RUNID/$RUN/\" secret-reads.logql", "Prints your file with the run number in place of RUNID.", "Loki receives a search that names this lab start, so old records stay out of the count."),
+                        ("jq -r '.data.result[0].value[1]'", "Picks the one number out of Loki's answer.", "The check needs the count and nothing else."),
+                        ("echo \"$COUNT\" | grep -qx 4 && echo ...", "Prints ok when the count is 4 and the line not yet right: when it is not.", "The exercise records hold exactly 4 reads of secrets by the account, so any other number means the search keeps too much or too little."),
+                    ],
+                },
+                {
                     "code": (
                         "cd /workspace/sdr-3\n"
                         "START=$(date -d '6 hours ago' +%s)\n"
                         "RUN=$(oc get configmap sdr-review -n siem -o jsonpath='{.data.anchor\\.txt}')\n"
                         "FAILED=$(" + LOKI_CALL + " \"$LOKI_URL/loki/api/v1/query\" --data-urlencode 'query=sum(count_over_time({lab_seed=\"sdr-3\", seed_run=\"'\"$RUN\"'\", log_type=\"application\", kubernetes_namespace_name=\"keycloak\"} |= \"LOGIN_ERROR\" |= \"lab-user7\" [6h]))' | jq -r '.data.result[0].value[1]')\n"
                         "SUCCESS=$(" + LOKI_CALL + " \"$LOKI_URL/loki/api/v1/query_range\" --data-urlencode 'query={lab_seed=\"sdr-3\", seed_run=\"'\"$RUN\"'\", log_type=\"application\", kubernetes_namespace_name=\"keycloak\"} |= `type=\"LOGIN\"` |= \"lab-user7\"' --data-urlencode \"start=$START\" --data-urlencode 'limit=1' --data-urlencode 'direction=forward' | jq -r '.data.result[0].values[0][0] | tonumber / 1000000000 | floor | todate')\n"
-                        "SECRETS=$(" + LOKI_CALL + " \"$LOKI_URL/loki/api/v1/query\" --data-urlencode 'query=sum(count_over_time({lab_seed=\"sdr-3\", seed_run=\"'\"$RUN\"'\", log_type=\"audit\"} | json | user_username=\"lab-user7\" | objectRef_resource=\"secrets\" | verb=\"get\" [6h]))' | jq -r '.data.result[0].value[1]')\n"
+                        "SECRETS=$(" + LOKI_CALL + " \"$LOKI_URL/loki/api/v1/query\" --data-urlencode \"query=$(sed \"s/RUNID/$RUN/\" secret-reads.logql)\" | jq -r '.data.result[0].value[1]')\n"
                         "jq -n --arg account lab-user7 --arg ip 203.0.113.50 --argjson failed \"$FAILED\" --arg success \"$SUCCESS\" --argjson secrets \"$SECRETS\" --arg other lab-admin1 '{account:$account, source_ip:$ip, failed_attempts:$failed, first_success_utc:$success, secrets_read:$secrets, other_account_targeted:$other}' > findings.json\n"
                         "cat findings.json"
                     ),
@@ -399,56 +430,16 @@ MODULE = {
                         ("cd /workspace/sdr-3, START=... and RUN=...", "Moves into the module folder and sets the start time and the run number again.", "A block must run on its own, even in a new lab shell, so it does not rely on the block before it."),
                         ("FAILED=$(...)", "Counts the failed sign-ins that name the account. Expect 12.", "The failure count is the first fact for findings.json. The gate recomputes it, so it must come from the records and not from memory."),
                         ("SUCCESS=$(...)", "Finds the first sign-in with type LOGIN for the account and turns its time into a readable time in UTC (the world's standard time). direction=forward makes Loki return the oldest match first; the default is newest first.", "The first success after the failures is the moment the account was taken over, so its time belongs in the findings."),
-                        ("SECRETS=$(...)", "Counts requests of kind get on secrets by the account. A secret is a stored password or key.", "How many secrets the account read is the impact of the takeover, the fact a report must neither overstate nor understate."),
+                        ("SECRETS=$(...)", "Runs the search you wrote in secret-reads.logql, with the run number put in place of RUNID. It counts requests of kind get on secrets by the account. A secret is a stored password or key.", "How many secrets the account read is the impact of the takeover, the fact a report must neither overstate nor understate."),
                         ("jq -n --arg ... --argjson ...", "Builds the findings object. --arg passes text, --argjson passes a number.", "Building the file with jq puts your values into valid JSON without typing quotes by hand, so the gate can read it."),
-                        ("> findings.json", "Writes the object to a file. The gate reads this file.", "The review gate in Step 5 reads this exact file name, so it has to be saved here."),
+                        ("> findings.json", "Writes the object to a file. The gate reads this file.", "The review gate in Step 4 reads this exact file name, so it has to be saved here."),
                     ],
                 },
             ],
             "security": "The findings name an account and an address, so keep the file private. Never paste secret values you might find into it.",
-            "action": "Run both blocks. In the first, read the order of events: what the account touched after it signed in. In the second, check each value is not empty before you move on.",
+            "note": "Spec for the search: it must count the requests of kind get on secrets made by the account lab-user7 in the last 6 hours, and nothing else. Keep the three parts that are already right (the run marker, the account and the 6 hours), and add two filters, one line each, starting with the pipe character: the kind of object (objectRef_resource) must be secrets and the request kind (verb) must be get. Reference after you have tried, to put between the account filter and [6h]: | objectRef_resource=\"secrets\" | verb=\"get\"",
+            "action": "Run the first block and read the order of events: what the account touched after it signed in. Run the starter block, then write your own version of secret-reads.logql and run the check until it says ok. Then run the last block and check each value is not empty before you move on.",
             "checkpoint": "findings.json holds six values: the account, the address, 12 failures, a success time, 4 secret reads, and the other account that was probed.",
-        },
-        {
-            "title": "Read the counts and choose a threshold",
-            "controls": [
-                {"id": 'SI-4 System Monitoring', "how": 'The control asks that detected events be analyzed and that monitoring be adjusted. Here you read the five-minute count for every minute, find the noise level and the two peaks, and choose a threshold between them. The chosen value is the adjustment you apply in Step 4.'},
-            ],
-            "learn": "Reading the five-minute count for every minute shows the noise level and the height of both bursts, which gives you the range a threshold can sit in.",
-            "takeaway": "Choose a threshold from the data, between the noise and the weakest real burst.",
-            "why": "The rule counts failures in a 5-minute window, so you list that count for every minute over 6 hours. The most common value in that list is the noise level. Minutes whose count is above the noise level are the bursts.",
-            "blocks": [
-                {
-                    "code": (
-                        "cd /workspace/sdr-3\n"
-                        "START=$(date -d '6 hours ago' +%s)\n"
-                        "RUN=$(oc get configmap sdr-review -n siem -o jsonpath='{.data.anchor\\.txt}')\n"
-                        "NOW=$(date +%s)\n"
-                        "Q='sum(count_over_time({lab_seed=\"sdr-3\", seed_run=\"RUN_ID\", log_type=\"application\", kubernetes_namespace_name=\"keycloak\"} |= \"LOGIN_ERROR\" [5m]))'\n"
-                        "Q=${Q/RUN_ID/$RUN}\n"
-                        + LOKI_CALL + " \"$LOKI_URL/loki/api/v1/query_range\" --data-urlencode \"query=$Q\" --data-urlencode \"start=$START\" --data-urlencode \"end=$NOW\" --data-urlencode 'step=60' > counts.json\n"
-                        "jq -r '.data.result[0].values[] | .[1]' counts.json | sort -n | uniq -c\n"
-                        "jq -r '.data.result[0].values[] | select((.[1] | tonumber) > 4) | [(.[0] | todate), .[1]] | @tsv' counts.json"
-                    ),
-                    "label": 'Read the five-minute count for every minute',
-                    "intro": 'You will now save the five-minute failure count for each minute of the last 6 hours, then see how often each value occurs and when it goes above 4.',
-                    "expect": 'Example only. Counts and times differ in your lab.\n<minutes> <value>\n<minutes> 4\n<minutes> <value>\n(the value with the most minutes is the noise level)\n<time>\t<a value above 4>\n(one group of times peaks near 9 and one near 16)',
-                    "lines": [
-                        ("cd /workspace/sdr-3", "Moves into the module folder, because counts.json is saved there.", "A block must run on its own, so it starts by going to the folder."),
-                        ("RUN=$(oc get configmap sdr-review ...)", "Reads the number of this lab start from the ConfigMap sdr-review. Every exercise record carries it as the label seed_run.", "Records from an earlier lab start may still be stored. Adding seed_run to each search keeps their old lines out of your counts."),
-                        ("START=$(date -d '6 hours ago' +%s)", "Sets the start of the range again, so the block also works if you opened a new lab shell since Step 2.", "A fresh lab shell would not have this variable, so you set it again and the block runs on its own."),
-                        ("NOW=$(date +%s)", "Stores the current time as the end of the range.", "A range search needs an end as well as a start, and this fixes the end at the moment you run it."),
-                        ("sum(count_over_time(... [5m]))", "The same count the rule makes: failed sign-ins in the last 5 minutes.", "Your threshold applies to exactly this count, so you must look at the same number the rule looks at."),
-                        ("step=60", "Asks for one value per minute.", "One value per minute matches how often the rule is checked, so you see every value the rule would see."),
-                        ("> counts.json", "Saves the answer so two commands can read it.", "Two commands below read the same answer, so one search is enough."),
-                        ("sort -n | uniq -c", "Counts how many minutes had each value. The biggest group is the noise level.", "The most common value is the noise level, and a threshold must sit above it."),
-                        ("select((.[1] | tonumber) > 4)", "Lists only the minutes whose count was above 4, with their times.", "These minutes are the bursts, with their times, so you can find the peak of each and choose a value below the smaller one."),
-                    ],
-                }
-            ],
-            "note": "The rule fires when the count is greater than the threshold, so choose a value above the noise level and below the weakest burst, with room on both sides. A value too close to the noise level can fire on a window edge. You set your chosen value as THRESHOLD in Step 4.",
-            "action": "Run the block. Read the noise level, the peak of the smaller burst and the peak of the larger burst.",
-            "checkpoint": "The most common value is 4, and two groups of minutes are above it, one peaking near 9 and one near 16 (a count one or two lower or higher is fine).",
         },
         {
             "title": "Apply the threshold to the rule and the panel",
@@ -457,7 +448,7 @@ MODULE = {
             ],
             "learn": "Sending your threshold to the rule and the panel through the Grafana API changes the live objects, so the rule stops firing on noise and the panel shows the same number.",
             "takeaway": "Change the rule and its panel together so they tell the same story.",
-            "why": "The alert rule and the dashboard panel both carry the threshold, and the two must agree. A panel that draws its line at the old value misleads whoever reads it. For each one you fetch the object from the Grafana API, change only the threshold with jq, and send it back. The review gate in Step 5 checks that the rule and the panel match.",
+            "why": "The alert rule and the dashboard panel both carry the threshold, and the two must agree. A panel that draws its line at the old value misleads whoever reads it. For each one you fetch the object from the Grafana API, change only the threshold with jq, and send it back. The review gate in Step 4 checks that the rule and the panel match.",
             "blocks": [
                 {
                     "code": (
@@ -470,10 +461,10 @@ MODULE = {
                     "label": 'Set the threshold on the alert rule',
                     "intro": 'You will now look up the rule failed-login-burst, change only its threshold in a saved copy, and send the copy back to Grafana.',
                     "expect": 'Example only. The time will differ.\n{\n  "title": "failed-login-burst",\n  "updated": "<time>"\n}',
-                    "screenshot": {"file": "SDR-3-shot-4a-grafana.png", "alt": "The Grafana alert rules page showing the failed-login-burst rule in the siem-detect folder", "width": 6.0},
+                    "screenshot": {"file": "SDR-3-shot-3a-grafana.png", "alt": "The Grafana alert rules page showing the failed-login-burst rule in the siem-detect folder", "width": 6.0},
                     "lines": [
                         ("cd /workspace/sdr-3", "Moves into the module folder, because rule.json is saved there.", "A block must run on its own, so it starts by going to the folder."),
-                        ("THRESHOLD=6", "Your chosen value. Change it if your reading of Step 3 says otherwise.", "One variable feeds both the rule and the panel in this step, so they cannot end up with different numbers."),
+                        ("THRESHOLD=6", "The threshold. The lab's noise is 4 a minute and its smaller burst peaks near 9, so 6 sits between them with room on both sides. The gate in Step 4 proves it, and Test 2 shows what 2 and 12 do.", "One variable feeds both the rule and the panel in this step, so they cannot end up with different numbers."),
                         ("RULE_UID=$(...)", "Finds the identifier of the rule named failed-login-burst.", "The API addresses a rule by its identifier and not by its title, so you look the identifier up by title first."),
                         ("jq --argjson thr ... .params=[$thr]", "Replaces the number the rule compares against, leaving everything else as it was.", "Only the threshold should change. Everything else in the rule must stay as the lab made it."),
                         ("-X PUT ... -d @rule.json", "Sends the whole changed rule back. X-Disable-Provenance lets the API change a rule that was made through the API.", "The whole changed rule goes back, and that is what makes the new threshold live."),
@@ -491,7 +482,7 @@ MODULE = {
                     "label": 'Set the same threshold on the dashboard panel',
                     "intro": 'You will now fetch the dashboard, move its red threshold line to the same value, and save it.',
                     "expect": 'Example only. The version number will differ.\n{\n  "status": "success",\n  "version": <n>\n}\n6',
-                    "screenshot": {"file": "SDR-3-shot-4b-grafana.png", "alt": "The Grafana panel Failed sign-ins per 5 minutes with a red threshold line at 6 (the plotted counts in this capture come from a larger test run and are higher than the counts you read in Step 3)", "width": 6.0},
+                    "screenshot": {"file": "SDR-3-shot-3b-grafana.png", "alt": "The Grafana panel Failed sign-ins per 5 minutes with a red threshold line at 6 (the plotted counts in this capture come from a larger test run and are higher than the counts you read in Step 3)", "width": 6.0},
                     "lines": [
                         ("cd ... and THRESHOLD=6", "Moves into the module folder and sets the value again. Change 6 if you chose a different value in the block above.", "A block must run on its own, so it does not rely on the one before it."),
                         ("api/dashboards/uid/sdr-auth-overview", "Fetches the dashboard that lab start made.", "The panel is a separate object from the rule, so you fetch it before you change it."),
@@ -542,7 +533,7 @@ MODULE = {
             "controls": [
                 {"id": 'SI-4 System Monitoring', "how": 'The control asks that monitoring be adjusted and then kept working. The gate replays events against the rule query in Loki, so it cannot show that Grafana itself runs the rule. This test reads the live rule back, then asks Grafana for the rule health, which must not be error.'},
             ],
-            "why": "The gate in Step 5 checked the panel against the rule, but it tests the rule's query in Loki, not the rule inside Grafana. Read the live rule back to see the tuned threshold, then ask Grafana for the health of the rule after its last evaluation, because a rule that saved but fails when it runs would never alert. Health can read unknown until the first evaluation after your change; if it does, run the last command again after a minute.",
+            "why": "The gate in Step 4 checked the panel against the rule, but it tests the rule's query in Loki, not the rule inside Grafana. Read the live rule back to see the tuned threshold, then ask Grafana for the health of the rule after its last evaluation, because a rule that saved but fails when it runs would never alert. Health can read unknown until the first evaluation after your change; if it does, run the last command again after a minute.",
             "code": (
                 "RULE_UID=$(curl -s " + GRAFANA_AUTH + " \"$GRAFANA_URL/api/v1/provisioning/alert-rules\" | jq -r 'map(select(.title==\"failed-login-burst\"))[0].uid')\n"
                 "curl -s " + GRAFANA_AUTH + " \"$GRAFANA_URL/api/v1/provisioning/alert-rules/$RULE_UID\" | jq -c '.data[1].model.conditions[0].evaluator'\n"
@@ -597,7 +588,7 @@ MODULE = {
             ),
             "lines": [
                 ("cd /workspace/sdr-3", "Moves into the module folder, where the gate was copied.", "The gate runs from there."),
-                ("for THRESHOLD in 2 12 6; do ... done", "Repeats the block for three values: too low, too high, and your working value.", "Each value is sent to the live rule with the same call you used in Step 4."),
+                ("for THRESHOLD in 2 12 6; do ... done", "Repeats the block for three values: too low, too high, and your working value.", "Each value is sent to the live rule with the same call you used in Step 3."),
                 ("python3 review_gate.py | grep -E 'noise|real burst|GATE'", "Runs the gate and keeps only the lines that matter.", "You see the verdict for each value."),
                 ("threshold 2 ... FAIL noise", "At 2 the rule fires all day, so the noise line fails.", "A rule that is too sensitive buries real alerts."),
                 ("threshold 12 ... FAIL real burst 1", "At 12 the rule is quiet but misses the smaller real burst.", "Quieting the rule too far loses a real attack."),
@@ -617,8 +608,8 @@ MODULE = {
     ],
     "design": [
         {
-            "decision": "Threshold read from the data, between noise and the weakest burst",
-            "how": "You list the five-minute failure count for every minute over six hours. You read the most common value as the noise level and the peaks as the bursts. You set the threshold between them with room on both sides.",
+            "decision": "Threshold between the noise and the weakest burst",
+            "how": "In Step 1 you separate the steady noise from the two bursts. You set the threshold between the noise level and the weakest burst, with room on both sides, and the review gate checks the result.",
             "why": "A threshold at or below the noise fires all day and one above the weakest real burst misses a probe.",
             "alternatives": "The advantage of an adaptive baseline that adjusts by itself is that it follows changing noise without manual retuning. The drawback is that it is harder to explain and test, and it can learn a slow attack as normal.",
         },
@@ -636,7 +627,7 @@ MODULE["portability"] = {
     "bullets": [
         "The investigation searches are plain LogQL and the tuning is plain Grafana HTTP API calls with curl and jq, so they run against any Loki and Grafana that hold the same records.",
         "Change these lab values first: LOKI_URL, LOKI_CA_FILE, the Loki credentials, GRAFANA_URL and the Grafana credentials, plus the rule title failed-login-burst, the dashboard uid sdr-auth-overview and the namespace names.",
-        "The threshold band comes from the seeded records. On a real system read your own counts in Step 3 and choose a value between your noise and your weakest real burst.",
+        "The threshold band comes from the seeded records. On a real system read your own counts, as in Step 1, and choose a value between your noise and your weakest real burst.",
         "The oc extract of the sdr-review ConfigMap and the Keycloak and audit label names are cluster-specific. The Grafana API paths can differ by Grafana version, so check them on yours.",
     ],
     "headers": ["Check", "In this lab (OpenShift)", "On other platforms", "What you change"],

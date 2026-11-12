@@ -2,7 +2,7 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 2 of 29 in the recommended order |
+| Sequence | Module 2 of 32 in the recommended order |
 | Timed work | About 60 minutes (45 hands-on, 15 verify) |
 | Standalone start | `lab start eng-1` |
 | Combined start | Continue from the end state of the previous module |

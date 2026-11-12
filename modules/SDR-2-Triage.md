@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 5 of 29 in the recommended order |
-| Timed work | About 60 minutes (42 hands-on, 18 verify) |
+| Sequence | Module 5 of 32 in the recommended order |
+| Timed work | About 56 minutes (38 hands-on, 18 verify) |
 | Standalone start | `lab start sdr-2` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | Loki and Grafana (free, open source), Mattermost (free, open source), OpenShift Container Platform, oc, curl, jq, python3 |
@@ -382,7 +382,7 @@ What this step adds (thick lines and outlines are new):
 
 ![The path a log takes, and where the triage commands look, after step 4](img/SDR-2-step-4.png)
 
-- The third command pairs a runtime shell record in Loki with the audit record that names the person.
+- The third command pairs a runtime shell record in Loki with the audit record that names the person. Later, in Verify, the path check walks every hop from the log collector to the alert channel and reads how old the newest record of each type is.
 
 #### 4a. Run the shell-in-a-pod checks for A-103
 
@@ -445,63 +445,15 @@ posted, HTTP 200
 - **AU-6:** You pair the Falco record with the audit record that names the person, compare the person with the approved list, and post a finding to the alert channel.
 - **IR-4:** The command always pairs the two sources and checks the approved list, so a close decision rests on named evidence. If no audit record names the person, the runbook rule is not to close the alert.
 
-### Step 5. Find the missing logs (AU-5 Response to Audit Logging Process Failures)
-
-**Learning point: The gap check lists a span of 28 minutes with no audit records, which shows that an empty search can mean the logs were never there.**
-
-- Before you trust any empty result you must know the logs were there and the telemetry path (the route a log takes to where you search it) was healthy.
-- The gap check lists spans with no records, and the path check (run in Verify) looks at every hop and reads the age of the newest record of each log type.
-- Use the gap and path checks whenever a search finds less than the alert says it should.
-
-What this step adds (thick lines and outlines are new):
-
-![The path a log takes, and where the triage commands look, after step 5](img/SDR-2-step-5.png)
-
-- The gap check searches Loki for spans with no records, and the path check in Verify walks every hop from the log collector to the alert channel and reads how old the newest record of each type is.
-
-#### 5a. List the spans with no records
-
-You will now ask triage.py for every span with no records.
-
-```bash
-cd /workspace/sdr-2
-python3 triage.py gaps
-```
-
-**Expected output:**
-
-```
-Example only. Times differ in your lab, and other log types may be listed too.
-GAP     audit          <start> to <end>  (28 minutes with no record)
-(and an ok line for each log type without a gap)
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| cd /workspace/sdr-2 | Moves into the module folder from step 1. | triage.py is in that folder. |
-| triage.py gaps | Prints every span of more than 10 minutes with no record, for each log type. | An empty search only means something if the logs existed. This lists where they did not. |
-
-![Output from a real lab run: List the spans with no records](img/SDR-2-shot-5a.png)
-
-> **NOTE:** The late log type in this exercise is the infrastructure log, which the path check in Verify names. The rule for a late log is to carry on with the triage, note the lateness in your decision line, and tell the platform team.
-
-> **YOUR TURN:** Run the command. Find the span that has no audit records.
-
-> **CHECKPOINT:** The gap check lists a span of 28 minutes with no audit record.
-
-> **TAKEAWAY:** An empty search proves nothing until you know the logs were there.
-
-**How this meets the control**
-
-- **AU-5:** The gap check lists spans with no records, and the path check in Verify tests every hop, so a failure of the logging process is noticed. The lab rule is to tell the platform team in the alert channel.
-
 ## Section 4. Verify It Works
 
 ### Test 1 (positive). The path check names the late log type (AU-5 Response to Audit Logging Process Failures)
 
+- Before you trust any empty result you must know the logs were there and the telemetry path (the route a log takes to where you search it) was healthy.
 - You checked your three decisions against the CHECK lines in Steps 2 to 4.
 - A healthy path would print no LATE line.
 - This exercise has one late log type, and finding it is the point.
+- The rule for a late log is to carry on with the triage, note the lateness in your decision line, and tell the platform team.
 
 ```bash
 cd /workspace/sdr-2
@@ -589,7 +541,7 @@ GAP     audit          <start> to <end>  (28 minutes with no record)
 | --- | --- | --- | --- |
 | AU-6 Audit Record Review, Analysis, and Reporting | Review audit records for unusual activity, work out its impact, and report the findings to named people. | The supplied triage.py commands and the Mattermost alert channel. Explained in section 2.1. | Section 3, Steps 2 to 4: you review the records behind three alerts and post a finding for each in the alert channel. |
 | IR-4 Incident Handling | Handle an incident through preparation, detection and analysis, containment, eradication and recovery, and keep the handling comparable and predictable. | The runbook, kept in the ConfigMap sdr-runbook, with its decision table. Explained in section 2.1. | Section 3, Steps 2 to 4: the detection and analysis phase, with a fixed set of checks and a fixed rule for what to do next. |
-| AU-5 Response to Audit Logging Process Failures | When the logging process itself fails, alert named people within a set time. | The path check and the gap check in triage.py, which read Loki, Grafana and Mattermost. Explained in section 2.3. | Section 3, Step 5, and Section 4, Tests 1 and 2: what a late log type and a gap in a log type look like, and the rule to escalate. |
+| AU-5 Response to Audit Logging Process Failures | When the logging process itself fails, alert named people within a set time. | The path check and the gap check in triage.py, which read Loki, Grafana and Mattermost. Explained in section 2.3. | Section 4, Tests 1 and 2: what a late log type and a gap in a log type look like, and the rule to escalate. |
 
 ### What each control is for
 

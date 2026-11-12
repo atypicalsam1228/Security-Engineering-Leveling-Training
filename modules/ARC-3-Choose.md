@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 15 of 29 in the recommended order |
-| Timed work | About 57 minutes (40 hands-on, 17 verify) |
+| Sequence | Module 17 of 32 in the recommended order |
+| Timed work | About 55 minutes (38 hands-on, 17 verify) |
 | Standalone start | `lab start arc-3` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | OpenShift Container Platform, Kyverno (free, open source), oc, jq, python3 |
@@ -396,18 +396,18 @@ audit.json  enforce.json  none.json
 - **CM-7:** The result files record whether each of the four requests is allowed or denied under each condition, which shows what each mode restricts.
 - **AU-12:** The snapshot script creates 20 load pods and saves the count of policy report results and events each mode produced.
 
-### Step 4. Read back what each mode refused and recorded (CM-7 Least Functionality, AU-12 Audit Record Generation)
+### Step 4. Read back the table, then turn it into a check on one requirement (CM-7 Least Functionality, AU-12 Audit Record Generation, SA-8 Security and Privacy Engineering Principles)
 
-**Learning point: Printing the comparison table shows, side by side, which of the four requests each mode refused and which records it left behind.**
+**Learning point: Printing the comparison table shows which of the four requests each mode refused and which records it left. Writing the requirement as a jq filter over the same files names the condition that meets it, and the filter can be rerun whenever the tool or the cluster changes.**
 
 - The comparison script reads the three result files and prints, for each condition, which requests were allowed or denied and which records exist.
-- The record counts are checked in Verify.
+- A decision that cannot be rechecked will be argued again, so the filter then asks one question of the same files: which condition refuses the root request and also leaves a record?
 
 What this step adds (thick lines and outlines are new):
 
 ![One choice, three conditions, one table, after step 4](img/ARC-3-step-4.png)
 
-- The comparison script reads the result files in your arc folder and prints the table of outcomes and records on your screen.
+- The comparison script reads the result files in your arc folder and prints the table of outcomes and records on your screen. A jq filter over the same files then prints the name of the condition that meets the requirement.
 
 #### 4a. Print the table of outcomes and records
 
@@ -430,31 +430,7 @@ A table with one column for each condition (none, audit, enforce): what each of 
 
 ![Output from a real lab run: Print the table of outcomes and records](img/ARC-3-shot-4a.png)
 
-> **NOTE:** Read only the request outcome rows and the record rows. Each of the 20 load pods breaks three rules, so in Audit mode expect three failed results per pod.
-
-> **CHECKPOINT:** The table has three columns. In Enforce the load pods created is 0 and the root request is denied. In none the root request is allowed. The Audit count is checked in Verify.
-
-> **TAKEAWAY:** Only Enforce refuses a rule-breaking request; Audit lets it through and records it.
-
-**How this meets the controls**
-
-- **CM-7:** The outcome rows show which of the four requests each mode refused, and only Enforce refuses any.
-- **AU-12:** The record rows show that Audit and Enforce each left reports or events and that the none condition left none. Verify checks the Audit count.
-
-### Step 5. Turn the table into a check on one requirement (SA-8 Security and Privacy Engineering Principles)
-
-**Learning point: Writing the requirement as a jq filter over the result files names the condition that meets it, and the filter can be rerun whenever the tool or the cluster changes.**
-
-- A decision that cannot be rechecked will be argued again.
-- The filter asks one question of the result files: which condition refuses the root request and also leaves a record?
-
-What this step adds (thick lines and outlines are new):
-
-![One choice, three conditions, one table, after step 5](img/ARC-3-step-5.png)
-
-- You run a jq filter over the same result files, which prints the name of the condition that meets the requirement on your screen.
-
-#### 5a. Write the requirement as a filter and reset the project
+#### 4b. Write the requirement as a filter and reset the project
 
 You will now run a jq filter over the three result files and reset the project.
 
@@ -477,16 +453,20 @@ enforce
 | \| .mode | Prints the name of each condition that passes. | Gives the answer as the name of the condition that meets the requirement. |
 | set_mode.sh none | Removes the policy and the load so the project is back to the starting condition. | Puts the project back to the starting condition so the next run starts clean. |
 
-![Output from a real lab run: Write the requirement as a filter and reset the project](img/ARC-3-shot-5a.png)
+![Output from a real lab run: Write the requirement as a filter and reset the project](img/ARC-3-shot-4b.png)
+
+> **NOTE:** Read only the request outcome rows and the record rows. Each of the 20 load pods breaks three rules, so in Audit mode expect three failed results per pod.
 
 > **TIP:** Change the requirement and rerun the first line, for example to require that the compliant case is still allowed or that no load pod is created.
 
-> **CHECKPOINT:** Only enforce is printed by the first line.
+> **CHECKPOINT:** The table has three columns. In Enforce the load pods created is 0 and the root request is denied. In none the root request is allowed. The Audit count is checked in Verify. Only enforce is printed by the first line of the filter block.
 
-> **TAKEAWAY:** A decision written as a runnable check does not have to be argued again.
+> **TAKEAWAY:** Only Enforce refuses a rule-breaking request, and a decision written as a runnable check does not have to be argued again.
 
-**How this meets the control**
+**How this meets the controls**
 
+- **CM-7:** The outcome rows show which of the four requests each mode refused, and only Enforce refuses any.
+- **AU-12:** The record rows show that Audit and Enforce each left reports or events and that the none condition left none. Verify checks the Audit count.
 - **SA-8:** The jq filter writes the requirement down, so the choice follows from written criteria that anyone can rerun.
 
 ## Section 4. Verify It Works
@@ -563,7 +543,7 @@ exit code 2
 
 | Control | What it requires, in plain words | Tool or service | Where this module covers it |
 | --- | --- | --- | --- |
-| SA-8 Security and Privacy Engineering Principles | Design choices follow stated engineering principles and are made before the system is built or changed. | The test script, the review gate, the comparison script and a jq filter over the result files. Explained in section 2.1. | Section 3, Steps 2 to 4: write and gate the test script, collect three conditions, read back the table. Section 3, Step 5: write the criterion as a check. Section 4, Test 2: the comparison refuses incomplete data. |
+| SA-8 Security and Privacy Engineering Principles | Design choices follow stated engineering principles and are made before the system is built or changed. | The test script, the review gate, the comparison script and a jq filter over the result files. Explained in section 2.1. | Section 3, Steps 2 to 4: write and gate the test script, collect three conditions, read back the table and write the criterion as a check. Section 4, Test 2: the comparison refuses incomplete data. |
 | CM-7 Least Functionality | Allow only what the mission needs and block the rest. | Kyverno policy arc-baseline in Audit and Enforce mode, with four test pods that each break one rule. Explained in section 2.1. | Section 3, Step 3: collect the outcome of each test request under each condition. Section 3, Step 4: print the table of outcomes. |
 | AU-12 Audit Record Generation | The system produces records of the events that matter. | Kyverno policy reports and cluster events, counted by the kit script snapshot.py. Explained in section 2.1. | Section 3, Step 3: snapshot.py counts what each mode recorded. Section 3, Step 4: read the records rows of the table. Section 4, Test 1: the record count follows from the load. |
 
@@ -579,7 +559,7 @@ Each table below says what the control is trying to prevent and how this module'
 | The operational question | What would you test to know which option is right, and what result would change your mind? |
 | What evidence proves it | The criteria, the test results for each option under the same test, and the check that applies the criteria. |
 | How much is enough | Each option is tested the same way, including a condition with nothing applied as a baseline. NIST leaves the principles organization-defined. The lab chooses a simple one: test each option under the same test before choosing. |
-| How the tool in this module satisfies it | The test script, the review gate and the comparison (Steps 2 to 4), and the criterion check in Step 5. |
+| How the tool in this module satisfies it | The test script, the review gate, the comparison and the criterion check (Steps 2 to 4). |
 
 #### CM-7 Least Functionality
 

@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 23 of 29 in the recommended order |
-| Timed work | About 73 minutes (60 hands-on, 13 verify) |
+| Sequence | Module 26 of 32 in the recommended order |
+| Timed work | About 63 minutes (50 hands-on, 13 verify) |
 | Standalone start | `lab start iac-3` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | Terraform (free), Ansible with the kubernetes.core collection and ansible-lint (free, open source), OpenShift Container Platform, oc, python3 |
@@ -11,16 +11,16 @@
 
 ## Section 1. Module Overview
 
-- Purpose: keep a namespace matching its approved baseline, pick Terraform or Ansible from measurements on your own cluster, and catch the change neither tool sees (CM-2, CM-3, CM-6).
-- You build an Ansible playbook for the baseline, a measurement harness, a conformance check and one combined gate script.
+- Purpose: keep a namespace matching its approved baseline, run Terraform and Ansible side by side on your own cluster, and catch the change neither tool sees (CM-2, CM-3, CM-6).
+- You build an Ansible playbook for the baseline, a conformance check and one combined gate script.
 - You run them in the lab shell against your cluster, make hand changes, and finish with one passing test and two negative tests that the gate must catch.
 
-- **Skill:** Write an Ansible playbook for a baseline that Terraform already holds, measure which hand changes each tool detects, and close the gap with a conformance check you write. Then join all checks into one gate and prove it with one passing test and two negative tests.
-- **Tools:** `terraform plan -detailed-exitcode` compares the Terraform code and its state file with the live namespace. `ansible-playbook --check` tests the playbook against the namespace without changing it, and `ansible-lint` checks its style. `oc` makes the hand changes and reads the live objects. `python3` runs `measure.py`, which times both tools, and `conformance.py`, which compares live objects with the playbook. `drift_check.sh` runs every check and ends with one exit code.
+- **Skill:** Write an Ansible playbook for a baseline that Terraform already holds, see which objects each tool can and cannot see, and close the gap with a conformance check you write. Then join all checks into one gate and prove it with one passing test and two negative tests.
+- **Tools:** `terraform plan -detailed-exitcode` compares the Terraform code and its state file with the live namespace. `ansible-playbook --check` tests the playbook against the namespace without changing it, and `ansible-lint` checks its style. `oc` makes the hand changes in the tests and reads the live objects. `python3` runs `conformance.py`, which compares live objects with the playbook. `drift_check.sh` runs every check and ends with one exit code.
 - **Security Function:** Detects a quota edited by hand, a deleted network policy and a role binding that no code lists, and blocks a wildcard role before it is applied. The combined gate exits non-zero on each of them.
 - **NIST CM-2 Baseline Configuration:** Terraform code and an Ansible playbook hold the same five baseline objects, and each tool's check compares the live namespace with them.
 - **NIST CM-3 Configuration Change Control:** The code mode of `conformance.py` reviews a proposed playbook and refuses a wildcard role before apply, and `drift_check.sh` gives a pipeline one exit code to stop on.
-- **NIST CM-6 Configuration Settings:** The Terraform plan, the Ansible check and the live conformance check monitor the quota, the default-deny policy and the roles, and the measurement table shows which check catches which hand change.
+- **NIST CM-6 Configuration Settings:** The Terraform plan, the Ansible check and the live conformance check monitor the quota, the default-deny policy and the roles, and the combined check catches the role binding that neither tool lists.
 
 ## Section 2. The Tools
 
@@ -52,8 +52,8 @@ How the lab is set up, and why:
 - You work in lab shell on your laptop and send every command to your cluster, as in ENG-0.
 - The baseline objects live in one namespace, iac-lab, so every change and every hand change you make stays inside it.
 - The Terraform code, the playbook and your scripts sit together in one folder in your lab shell, because both tools run from there and read the cluster from the same kubeconfig file.
-- The picture mentions a state file only on the Terraform side because only Terraform keeps one; you see this in Step 4.
-- The harness is the only part that edits the namespace by hand, and it restores each change before the next one, so the table compares like with like.
+- The picture mentions a state file only on the Terraform side because only Terraform keeps one; you see this in Step 3.
+- Only you edit the namespace by hand, in the two negative tests at the end, and each test puts the namespace back.
 
 ![One baseline, two tools, one gate](img/IAC-3-diagram-1.png)
 
@@ -62,21 +62,19 @@ How the lab is set up, and why:
 - **3. Your lab shell:** the tools container on your laptop where you type every command.
 - **4. Folder /workspace/iac-3:** the working folder in your lab shell that holds the Terraform code, the playbook and your scripts.
 - **5. Baseline objects:** the namespace, the quota, the default-deny policy, the role and the role binding in namespace iac-lab, created by Terraform.
-- **6. Extra role binding:** a role binding named extra-binding that the harness adds by hand and that no code lists.
+- **6. Extra role binding:** a role binding named extra-binding that you add by hand in Test 2 and that no code lists.
 - **7. Terraform code:** the supplied files that created the baseline, with a state file that remembers the objects.
 - **8. Ansible playbook:** the file baseline.yml that you write for the same objects. It keeps no state file.
-- **9. Measurement harness:** measure.py makes three hand changes, runs both tools after each and restores the namespace.
-- **10. Conformance check:** conformance.py lists the live role bindings and network policies and compares them with the names in the playbook.
-- **11. Combined gate script drift_check.sh:** runs the code check, the Terraform plan, the Ansible check and the live check, and ends with one exit code.
+- **9. Conformance check:** conformance.py lists the live role bindings and network policies and compares them with the names in the playbook.
+- **10. Combined gate script drift_check.sh:** runs the code check, the Terraform plan, the Ansible check and the live check, and ends with one exit code.
 
 Where each part runs, and why:
 
 | Part | Where it runs | Why it is built this way |
 | --- | --- | --- |
 | Baseline objects | The namespace iac-lab | Terraform created them before you start, so you compare a second tool against a baseline that already exists. |
-| Terraform code | The folder /workspace/iac-3/terraform in your lab shell | It is supplied and applied, so you spend your effort on the second tool and on the measurement. |
+| Terraform code | The folder /workspace/iac-3/terraform in your lab shell | It is supplied and applied, so you spend your effort on the second tool and on the gap neither tool sees. |
 | Ansible playbook | The folder /workspace/iac-3/ansible in your lab shell | You write it from the same object list, so the two tools declare the same thing. |
-| Measurement harness | The folder /workspace/iac-3 in your lab shell | It runs both tools and times them, so the choice rests on a table from your cluster. |
 | Conformance check and drift_check.sh | The folder /workspace/iac-3 in your lab shell | They read live state and the playbook, so you can run them after every change. |
 
 ### 2.1 Two tools, one baseline (CM-2 Baseline Configuration)
@@ -98,19 +96,15 @@ The table lists the differences between the tools that a command in this module 
 
 | Property | Terraform | Ansible | Where you see it |
 | --- | --- | --- | --- |
-| What remembers the objects | A state file next to the code | Nothing between runs: it asks the cluster each time | Step 4: ls shows the state file and terraform state list reads it |
-| Drift command and its exit code | plan -detailed-exitcode: 0 no changes, 2 changes, 1 error | --check: exit 0 whether or not changes are found; the changed count carries the answer | Step 3: the exit and detected columns |
-| Objects it can see | Only resources in its code | Only tasks in its playbook | Step 3: the third hand change |
-| Time for one drift check | Measured on your cluster | Measured on your cluster | Step 3: the seconds column |
+| What remembers the objects | A state file next to the code | Nothing between runs: it asks the cluster each time | Step 3: ls shows the state file and terraform state list reads it |
+| Drift command and its exit code | plan -detailed-exitcode: 0 no changes, 2 changes, 1 error | --check: exit 0 whether or not changes are found; the changed count carries the answer | Step 2: the Terraform exit and the changed count; Section 4, Test 2 |
+| Objects it can see | Only resources in its code | Only tasks in its playbook | Section 4, Test 2: the extra role binding |
 
 ### 2.2 What drift detection sees (CM-6 Configuration Settings)
 
 - Drift is a difference between the code and the live objects.
-- In Step 3 the harness measure.py makes three hand changes with oc, one at a time, and puts everything back before the next.
-- After each change the harness runs the Terraform plan and the Ansible check, and records the exit code, whether it detected the change, and the seconds taken.
-- Change (a) edits the quota value, which changes an object that both code bases list.
-- Change (b) deletes the default-deny policy, which removes an object that both code bases list.
-- Change (c) adds an extra role binding that neither code base lists, so neither tool knows about it.
+- A quota edited by hand or a default-deny policy deleted by hand changes an object that both code bases list, so the Terraform plan and the Ansible check both report it.
+- An extra role binding added by hand is an object that neither code base lists, so neither tool knows about it. Test 2 shows this.
 
 #### CM-6: Configuration Settings
 
@@ -140,14 +134,14 @@ The table lists the differences between the tools that a command in this module 
 
 #### Run both tools in the gate and treat each code base as its own declaration
 
-- How: drift_check.sh runs the Terraform plan and the Ansible check separately and turns their different exit codes into the same three words. The table shows both tools detect the same two changes and miss the same one, so neither adds coverage for these objects. Terraform also keeps a state file, a second record that must stay in step with the cluster, and Ansible keeps none.
+- How: drift_check.sh runs the Terraform plan and the Ansible check separately and turns their different exit codes into the same three words. Both tools see only the objects their code lists, so neither adds coverage for an object in no code, as Test 2 shows. Terraform also keeps a state file, a second record that must stay in step with the cluster, and Ansible keeps none.
 - Why: The two code bases are two declarations of one baseline, and only a check by each tool against the live cluster exposes a difference between them.
-- Alternatives: One tool as the single owner is the alternative. Its advantage is one code base to review and fewer seconds per check, as your seconds column shows, but it gives no second opinion and leaves the gap in the table open.
+- Alternatives: One tool as the single owner is the alternative. Its advantage is one code base to review and one fewer tool to run, but it gives no second opinion and leaves the gap for objects in no code open.
 
 #### Add a live conformance check instead of a third tool
 
 - How: conformance.py lists the live role bindings and network policies and fails on any name the playbook does not declare, except five role bindings the platform creates, allowed by exact name. It starts from what is live, so it does not depend on a code list.
-- Why: The table shows the gap is in what the tools look at, not in how well they look. A check that starts from the live list needs no state file.
+- Why: Test 2 shows the gap is in what the tools look at, not in how well they look. A check that starts from the live list needs no state file.
 - Alternatives: Importing every live object into the code is the alternative. Its advantage is that the tools would then see every object, but a hand change would become the new baseline unless a person reviews it.
 
 #### Treat a check that could not run as a failure with its own exit code
@@ -347,10 +341,12 @@ Passed: 0 failure(s), 0 warning(s) in 1 files processed of 1 encountered. Last p
 
 ### Step 2. Apply it and prove a second run changes nothing (CM-2 Baseline Configuration)
 
-**Learning point: Applying the playbook, deleting the quota and applying again shows two things. The playbook changes nothing when the namespace matches, and it restores an object that is missing.**
+**Learning point: Deleting the quota and applying the playbook twice shows two things. The playbook restores an object that is missing, and it changes nothing when the namespace matches.**
 
-- You check and apply the playbook, and Ansible reports changed=0 because the objects already match what Terraform made.
-- Deleting the quota by hand and applying shows the playbook put it back, and applying once more shows changed=0.
+- You delete the quota by hand and apply the playbook, which puts it back and reports changed=1.
+- Applying once more reports changed=0 because everything now matches: the playbook is idempotent, which means safe to run again.
+- Terraform then plans no changes, which shows the two tools agree.
+- ansible-playbook --check, which the gate uses later, runs the same tasks and reports what would change without changing anything.
 
 What this step adds (thick lines and outlines are new):
 
@@ -358,44 +354,7 @@ What this step adds (thick lines and outlines are new):
 
 - The playbook applies to the namespace, finds that the objects already match, recreates a deleted one, and Terraform still plans no changes.
 
-#### 2a. Check, then apply
-
-You will now run the playbook in check mode (it reports what would change and changes nothing) with --diff (which prints the before and after of each change), then run it for real.
-
-Look for these as you read:
-
-- changed=0 in both PLAY RECAP lines. The objects already match, so there is nothing to print in a diff.
-- ok=1 counts the task once, not once per object: the loop is inside one task.
-
-```bash
-cd /workspace/iac-3
-ansible-playbook --check --diff ansible/baseline.yml
-ansible-playbook ansible/baseline.yml
-```
-
-**Expected output:**
-
-```
-Example only.
-TASK [Apply each baseline object] *****
-ok: [localhost] => (item=Namespace/iac-lab)
-ok: [localhost] => (item=ResourceQuota/iac-quota)
-ok: [localhost] => (item=NetworkPolicy/default-deny)
-ok: [localhost] => (item=Role/iac-reader)
-ok: [localhost] => (item=RoleBinding/iac-reader-binding)
-PLAY RECAP *****
-localhost : ok=1 changed=0 unreachable=0 failed=0 skipped=0 rescued=0 ignored=0
-(the same again for the real run)
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| cd /workspace/iac-3 | Moves into the working folder. | The playbook path below is relative to this folder. |
-| --check | Runs every task in check mode: the module asks the cluster what it would change, and changes nothing. | This is the drift command for Ansible. You use it again in the harness and in drift_check.sh. |
-| --diff | Prints the before and after of any object that would change. | Shows exactly which setting differs. It prints nothing here because nothing differs. |
-| ansible-playbook ansible/baseline.yml | Runs the playbook for real. | Applying must also be safe to repeat: this is the idempotent run. |
-
-#### 2b. Delete the quota, apply twice, and ask Terraform
+#### 2a. Delete the quota, apply twice, and ask Terraform
 
 You will now delete the quota by hand, run the playbook twice and read only the PLAY RECAP line each time, then ask Terraform whether it still agrees with the cluster.
 
@@ -434,13 +393,13 @@ exit=0
 | ansible-playbook ... \| grep 'changed=' | Runs the playbook and prints only the recap line that holds the changed count. | The changed count is what tells you whether a run did anything. |
 | terraform ... plan -detailed-exitcode | Asks Terraform whether the live namespace still matches its code. | Two tools manage the same objects, so you check that one did not leave the other out of step. |
 
-![Output from a real lab run: Delete the quota, apply twice, and ask Terraform](img/IAC-3-shot-2b.png)
+![Output from a real lab run: Delete the quota, apply twice, and ask Terraform](img/IAC-3-shot-2a.png)
 
 > **TIP:** The quota was recreated by Ansible, yet Terraform is satisfied. Terraform looks the object up by its name and namespace, so it does not matter which tool made it.
 
-> **YOUR TURN:** Run the first block, then the second.
+> **YOUR TURN:** Run the block.
 
-> **CHECKPOINT:** The first block ends with changed=0 twice. In the second, the first run shows changed=1, the second shows changed=0, and the Terraform exit is 0.
+> **CHECKPOINT:** The first run shows changed=1, the second shows changed=0, and the Terraform exit is 0.
 
 > **TAKEAWAY:** A playbook that has never changed anything has not been tested.
 
@@ -448,203 +407,28 @@ exit=0
 
 - **CM-2:** Deleting one object and applying again proves that the playbook restores the baseline and that Terraform still agrees with the cluster.
 
-### Step 3. Measure what each tool detects (CM-6 Configuration Settings)
+### Step 3. See what the tools list, then close the gap (CM-6 Configuration Settings, CM-3 Configuration Change Control)
 
-**Learning point: Running the harness produces one table from your cluster that shows which of three hand changes each tool detects and how long each takes.**
+**Learning point: Reading the state list shows why neither tool can see an extra binding added by hand, and the conformance check closes that gap by starting from what is live.**
 
-- A harness (a script that sets up a situation and measures it) makes three hand changes one at a time, runs both drift checks after each, and prints a table.
-- The harness uses only the Python standard library.
-- The harness first checks that the baseline is clean, because a table made from a dirty start would mean nothing.
-- The harness restores every change before the next.
+- Terraform and Ansible look only at the objects their code lists, so a role binding added by hand is invisible to both; Test 2 proves it.
+- Only a check that does not rely on the code's list adds coverage.
+- First you see where each tool's list comes from, then you write that check.
 
 What this step adds (thick lines and outlines are new):
 
 ![One baseline, two tools, one gate, after step 3](img/IAC-3-step-3.png)
 
-- A measurement harness makes three hand changes, one at a time, runs both tools after each and restores the namespace. One of the hand changes is an extra role binding that no code lists.
+- A conformance check lists the live role bindings and network policies and compares them with the names in the playbook, so it finds an extra role binding that no code lists. Its code mode also reads the playbook before anything is applied.
 
-#### 3a. Save the measurement harness
-
-You will now create the file measure.py, a Python script, in the folder /workspace/iac-3.
-
-- Paste all of it into the lab shell at once.
-- measure.py prints nothing yet.
-
-```bash
-cd /workspace/iac-3
-cat > measure.py <<'EOF'
-import os
-import re
-import subprocess
-import sys
-import time
-
-BASE = "/workspace/iac-3"
-NS = "iac-lab"
-PLAYBOOK = BASE + "/ansible/baseline.yml"
-ENV = dict(os.environ, ANSIBLE_NOCOLOR="1")
-
-
-def run(args):
-    start = time.monotonic()
-    done = subprocess.run(args, capture_output=True, text=True, env=ENV)
-    return done, round(time.monotonic() - start, 1)
-
-
-def terraform_plan():
-    done, secs = run(["terraform", "-chdir=" + BASE + "/terraform", "plan",
-                      "-detailed-exitcode", "-input=false", "-no-color"])
-    detected = {0: "no", 2: "yes"}.get(done.returncode, "error")
-    return done.returncode, detected, secs
-
-
-def ansible_check():
-    done, secs = run(["ansible-playbook", "--check", PLAYBOOK])
-    found = re.search(r"changed=(\d+)", done.stdout)
-    if done.returncode != 0 or not found:
-        return done.returncode, "error", secs
-    return done.returncode, "yes" if int(found.group(1)) > 0 else "no", secs
-
-
-def must(args):
-    done, _ = run(args)
-    if done.returncode != 0:
-        sys.exit("command failed: " + " ".join(args) + "\n" + done.stderr)
-
-
-def quota(pods):
-    patch = '{"spec":{"hard":{"pods":"' + pods + '"}}}'
-    return ["oc", "patch", "resourcequota", "iac-quota", "-n", NS, "--type=merge", "-p", patch]
-
-
-CHANGES = [
-    ("a quota edited", quota("50"), quota("10")),
-    ("b policy deleted", ["oc", "delete", "networkpolicy", "default-deny", "-n", NS],
-     ["ansible-playbook", PLAYBOOK]),
-    ("c extra binding", ["oc", "create", "rolebinding", "extra-binding", "--role=iac-reader",
-                         "--serviceaccount=" + NS + ":iac-extra", "-n", NS],
-     ["oc", "delete", "rolebinding", "extra-binding", "-n", NS]),
-]
-TOOLS = (("terraform", terraform_plan), ("ansible", ansible_check))
-
-
-def measure(label):
-    return [(label, tool, *probe()) for tool, probe in TOOLS]
-
-
-rows = measure("0 no change")
-if any(row[3] != "no" for row in rows):
-    sys.exit("The baseline is not clean. Run: ansible-playbook ansible/baseline.yml and oc delete rolebinding extra-binding -n iac-lab --ignore-not-found, then run this script again.")
-for label, inject, restore in CHANGES:
-    must(inject)
-    rows += measure(label)
-    must(restore)
-
-print("{:<18} {:<10} {:>5} {:<9} {:>8}".format("change", "tool", "exit", "detected", "seconds"))
-for label, tool, code, detected, secs in rows:
-    print("{:<18} {:<10} {:>5} {:<9} {:>8}".format(label, tool, code, detected, secs))
-for label, _, _ in CHANGES:
-    seen = [r[1] for r in rows if r[0] == label and r[3] == "yes"]
-    print(label + ": detected by " + (", ".join(seen) or "NEITHER tool"))
-EOF
-```
-
-**Expected output:**
-
-```
-Example only. Making a file prints nothing. The next block runs it.
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| cd ... / cat > measure.py <<'EOF' ... EOF | Moves into the working folder and writes everything up to the line EOF into the file measure.py. | A heredoc makes a whole file with a paste, so you need no editor. |
-| ENV = dict(os.environ, ANSIBLE_NOCOLOR="1") | Copies the environment and turns off colored output. | Color codes would hide the changed= text the script searches for. |
-| def run(args) | Runs one command, captures its output and exit code, and measures the seconds with a monotonic clock (one that never jumps backward). | The same stopwatch times both tools, so the seconds are comparable. |
-| def terraform_plan() | Runs plan -detailed-exitcode. Exit 0 means no, exit 2 means yes, anything else is an error. | This is the documented meaning of the exit codes, so the table reports an error and not a false clean. |
-| def ansible_check() | Runs --check, reads the changed count from the recap, and reports yes if it is above 0. | Check mode exits 0 either way, so the exit code alone cannot tell you. |
-| def must(args) | Runs a command and stops the whole script if it fails. | A change that did not happen would make the row wrong, so the script stops instead. |
-| def quota(pods) | Builds the oc patch command that sets the pods value in the quota. | Used twice: once to edit the quota and once to put it back. |
-| CHANGES | Three entries, each with a label, the command that makes the change and the command that undoes it. | (a) edits a listed object, (b) removes a listed object, (c) adds an object that no code lists. Restoring (b) re-runs the playbook. |
-| rows = measure("0 no change") | Measures both tools once before any change, and stops if either reports a difference. | A control row. It proves a clean namespace reads as no, and it gives a baseline for the seconds. |
-| for label, inject, restore in CHANGES | For each change: make it, measure both tools, restore. | One change at a time, so a result belongs to exactly one change. |
-| print(...) table and the last loop | Prints one row per change and tool, then one line per change naming the tools that detected it. | The last lines make a missed change impossible to overlook. |
-
-#### 3b. Run the harness
-
-You will now run the harness measure.py.
-
-- The harness changes the namespace three times and puts it back each time, so it takes a little while.
-- If an earlier run was stopped half way, the script says so and tells you how to restore the namespace.
-
-Look for these as you read:
-
-- The Ansible exit column is 0 on every row, even when it detected a change. Only the detected column tells you.
-- Change c is detected by neither tool. Read the last three lines of your own output before the next step.
-
-```bash
-cd /workspace/iac-3
-python3 measure.py
-```
-
-**Expected output:**
-
-```
-Example only. Your seconds will differ.
-change             tool        exit detected   seconds
-0 no change        terraform      0 no             1.7
-0 no change        ansible        0 no             3.8
-a quota edited     terraform      2 yes            1.7
-a quota edited     ansible        0 yes            3.8
-b policy deleted   terraform      2 yes            1.7
-b policy deleted   ansible        0 yes            3.8
-c extra binding    terraform      0 no             1.7
-c extra binding    ansible        0 no             3.8
-a quota edited: detected by terraform, ansible
-b policy deleted: detected by terraform, ansible
-c extra binding: detected by NEITHER tool
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| cd /workspace/iac-3 | Moves into the working folder. | The script finds the playbook and the Terraform folder from here. |
-| python3 measure.py | Runs the script with the system Python. | Plain Python 3.9 is enough: the script imports only the standard library. |
-
-![Output from a real lab run: Run the harness](img/IAC-3-shot-3b.png)
-
-> **NOTE:** If the script stops with the message that the baseline is not clean, an earlier run was stopped half way. Type the two commands in the message to restore the namespace, then run the script again. Do not run lab start: it deletes the folder and every file you wrote.
-
-> **YOUR TURN:** Run the first block to make measure.py, then run the second block.
-
-> **CHECKPOINT:** The table has eight rows. Changes a and b are detected by both tools; change c shows no for both. The last three lines say so in words.
-
-> **TAKEAWAY:** Measure what each tool detects instead of assuming it.
-
-**How this meets the control**
-
-- **CM-6:** The table records which tool notices each of three hand changes to a setting, with the exit code and the seconds.
-
-### Step 4. Read the table, then close the gap (CM-6 Configuration Settings, CM-3 Configuration Change Control)
-
-**Learning point: Reading the state list shows why both tools missed the extra binding, and the conformance check closes that gap by starting from what is live.**
-
-- The detection columns in the table match, so detection alone cannot choose between the tools.
-- Only a check that does not rely on the code's list would add coverage.
-- First you see why both tools missed change c, then you write that check.
-
-What this step adds (thick lines and outlines are new):
-
-![One baseline, two tools, one gate, after step 4](img/IAC-3-step-4.png)
-
-- A conformance check lists the live role bindings and network policies and compares them with the names in the playbook. Its code mode also reads the playbook before anything is applied.
-
-#### 4a. See what each tool remembers
+#### 3a. See what each tool remembers
 
 You will now list the files each tool keeps and ask Terraform which objects its state file records, without changing anything.
 
 Look for these as you read:
 
 - Terraform keeps a state file (terraform.tfstate). Ansible keeps nothing beyond the playbook.
-- The state list names exactly five objects. extra-binding is not among them, which is why a plan could not see it. The playbook lists the same five objects.
+- The state list names exactly five objects. An object added by hand, such as an extra role binding, would not be among them, so a plan could not see it. The playbook lists the same five objects.
 
 ```bash
 cd /workspace/iac-3
@@ -673,11 +457,11 @@ kubernetes_role_v1.reader
 | --- | --- | --- |
 | cd /workspace/iac-3 | Moves into the working folder. | Both tool folders are found from here. |
 | ls -l terraform ansible | Lists both folders with sizes. Hidden items such as the folder .terraform are not shown. | Shows the difference in what each tool leaves behind: a state file on one side, none on the other. |
-| terraform ... state list | Prints every object recorded in the state file. | Proves the point of change c: a tool only checks what it records or lists. |
+| terraform ... state list | Prints every object recorded in the state file. | Proves the point: a tool only checks what it records or lists. |
 
-![Output from a real lab run: See what each tool remembers](img/IAC-3-shot-4a.png)
+![Output from a real lab run: See what each tool remembers](img/IAC-3-shot-3a.png)
 
-#### 4b. Save the conformance check
+#### 3b. Save the conformance check
 
 You will now create the file conformance.py, a Python script, in the folder /workspace/iac-3.
 
@@ -762,11 +546,11 @@ Example only. Making a file prints nothing. The next block runs it.
 | def declared(path) | Reads the playbook file with PyYAML (a Python library that reads YAML) and returns its list of five objects. | The playbook is the declared list, so there is one source of names. |
 | def wildcard(role) | Returns the rules in a role that contain a star in the groups, resources or verbs. | A star grants every verb or every resource, which a read-only role must never do. |
 | def check_code(path) | Reads only the playbook and reports any Role that has a wildcard. | This is the before-apply mode: it needs no cluster, so it can stop a risky change before it is applied. |
-| def check_live(path) | Asks oc for the live role bindings, network policies and roles, and reports any binding or policy not declared, and any live role with a wildcard. | This closes the gap the table showed: it starts from what is live and not from what the code lists. |
+| def check_live(path) | Asks oc for the live role bindings, network policies and roles, and reports any binding or policy not declared, and any live role with a wildcard. | This closes the gap: it starts from what is live and not from what the code lists. |
 | mode and path | The first argument picks code, live or all. The optional second names a playbook file. | Lets you check a proposed playbook file before it replaces the real one. |
 | sys.exit(1 if problems else 0) | Exits 1 if anything was found and 0 if not. | A gate can only stop on a failure if the script reports one. |
 
-#### 4c. Run the conformance check on the clean namespace
+#### 3c. Run the conformance check on the clean namespace
 
 You will now run both modes of the check against the clean namespace and print its exit code.
 
@@ -790,18 +574,18 @@ exit=0
 | python3 conformance.py | Runs both modes: the code check on the playbook and the live check on the namespace. | On a clean namespace both pass. |
 | echo "exit=$?" | Prints the exit code of the script. | 0 means no findings. |
 
-> **YOUR TURN:** Run the first block. Then look back at your Step 3 table: both tools caught changes a and b, and neither caught c. Run the second block to make conformance.py, then run the last block.
+> **YOUR TURN:** Run the first block and note that both tools check only these five objects. Run the second block to make conformance.py, then run the last block.
 
-> **CHECKPOINT:** The state list shows five objects and no extra-binding. The check prints conformance ok (all) and exit=0.
+> **CHECKPOINT:** The state list shows five objects. The check prints conformance ok (all) and exit=0.
 
 > **TAKEAWAY:** A tool only checks what its code lists, so finding the rest needs a check that starts from the live objects.
 
 **How this meets the controls**
 
-- **CM-6:** The conformance check finds the role bindings and network policies that no code lists, which the table showed both tools miss.
+- **CM-6:** The conformance check finds the role bindings and network policies that no code lists, which neither code base lists.
 - **CM-3:** The code mode of the same script refuses a wildcard role before apply, which makes an automated review gate for the playbook.
 
-### Step 5. Combine the checks into one gate (CM-3 Configuration Change Control, CM-6 Configuration Settings)
+### Step 4. Combine the checks into one gate (CM-3 Configuration Change Control, CM-6 Configuration Settings)
 
 **Learning point: Joining the four checks into drift_check.sh gives a pipeline one exit code to act on, with a separate value for a check that could not run.**
 
@@ -811,11 +595,11 @@ exit=0
 
 What this step adds (thick lines and outlines are new):
 
-![One baseline, two tools, one gate, after step 5](img/IAC-3-step-5.png)
+![One baseline, two tools, one gate, after step 4](img/IAC-3-step-4.png)
 
 - One script, drift_check.sh, runs the code check, the Terraform plan, the Ansible check and the live check, and reports one exit code.
 
-#### 5a. Save the combined gate
+#### 4a. Save the combined gate
 
 You will now create the file drift_check.sh, a shell script, in the folder /workspace/iac-3.
 
@@ -884,7 +668,7 @@ Example only. Making a file prints nothing. The next block runs it.
 | cat ... \| grep '^FAIL' | Prints the FAIL lines from both conformance logs, which say what was found. | A DRIFT line says which check; a FAIL line says which object. |
 | [ "$broken" -eq 0 ] \|\| exit 3 and exit "$drift" | Exits 3 if any check could not run, else exits 1 if any found drift, else 0. | Exit codes: 0 clean, 1 drift or a violation, 3 a check could not run. A gate never reads a broken check as clean. |
 
-#### 5b. Run the gate on the clean namespace
+#### 4b. Run the gate on the clean namespace
 
 You will now run the script and print its exit code.
 
@@ -911,7 +695,7 @@ exit=0
 | bash drift_check.sh | Runs the script with bash. | Runs all four checks in order. |
 | echo "exit=$?" | Prints the exit code. | 0 here means every check passed. |
 
-![Output from a real lab run: Run the gate on the clean namespace](img/IAC-3-shot-5b.png)
+![Output from a real lab run: Run the gate on the clean namespace](img/IAC-3-shot-4b.png)
 
 > **TIP:** To use this as a gate before an apply, run python3 conformance.py code ansible/baseline.yml && ansible-playbook ansible/baseline.yml. The apply happens only if the code check passes. CPS-4 is a good companion: it practices the same kind of live check on a workload.
 
@@ -1077,8 +861,8 @@ gate exit=1
 | Control | What it requires, in plain words | Tool or service | Where this module covers it |
 | --- | --- | --- | --- |
 | CM-2 Baseline Configuration | Keep a current baseline (the agreed starting configuration) under configuration control. NIST leaves the review frequency organization-defined; FedRAMP assigns at least annually and when a significant change occurs. | Terraform code and an Ansible playbook, each holding the same five objects. Explained in section 2.1. | Section 3, Steps 1 and 2: write the playbook for the baseline and prove that a second run changes nothing. Section 4, Test 1: the live namespace matches the baseline. |
-| CM-3 Configuration Change Control | Review proposed changes and approve or disapprove them. Here the proposed change is a playbook, and a script that refuses a wildcard role reviews it automatically before anything is applied. | A before-apply code check in conformance.py, and drift_check.sh. Explained in section 2.3. | Section 3, Steps 4 and 5: write the code check and the combined gate. Section 4, Test 3: a wildcard role is refused before apply. |
-| CM-6 Configuration Settings | Monitor and control changes to configuration settings. Here the settings are a quota value, a default-deny rule and a read-only role. FedRAMP requires the DoD STIGs for configuration settings, then CIS Level 2 guidelines where no STIG exists. | terraform plan -detailed-exitcode, ansible-playbook --check and a live conformance check. Explained in section 2.2. | Section 3, Steps 3 to 5: measure which tool sees which change, then close the gap. Section 4, Test 2: an extra role binding is caught by the combined check only. |
+| CM-3 Configuration Change Control | Review proposed changes and approve or disapprove them. Here the proposed change is a playbook, and a script that refuses a wildcard role reviews it automatically before anything is applied. | A before-apply code check in conformance.py, and drift_check.sh. Explained in section 2.3. | Section 3, Steps 3 and 4: write the code check and the combined gate. Section 4, Test 3: a wildcard role is refused before apply. |
+| CM-6 Configuration Settings | Monitor and control changes to configuration settings. Here the settings are a quota value, a default-deny rule and a read-only role. FedRAMP requires the DoD STIGs for configuration settings, then CIS Level 2 guidelines where no STIG exists. | terraform plan -detailed-exitcode, ansible-playbook --check and a live conformance check. Explained in section 2.2. | Section 3, Steps 3 and 4: close the gap that neither tool sees, then combine the checks. Section 4, Test 2: an extra role binding is caught by the combined check only. |
 
 ### What each control is for
 
@@ -1102,17 +886,17 @@ Each table below says what the control is trying to prevent and how this module'
 | The operational question | Would a risky proposed change be stopped before it is applied, and would a change made outside the code be noticed? |
 | What evidence proves it | The result of the code check on a wildcard role, and the exit code of the combined check after a hand change. |
 | How much is enough | A script refuses a wildcard role before apply. The lab does not decide who approves changes; that is the organization's process and is not tested here. |
-| How the tool in this module satisfies it | The code check in conformance.py (Step 4) and drift_check.sh (Step 5). |
+| How the tool in this module satisfies it | The code check in conformance.py (Step 3) and drift_check.sh (Step 4). |
 
 #### CM-6 Configuration Settings
 
 | Question | Answer |
 | --- | --- |
 | Control Intent | A setting is changed by hand, such as a quota raised or a default-deny policy removed, and the tools that guard the baseline say nothing. |
-| The operational question | Which hand changes does each tool notice, which does it miss, and what covers the rest? |
-| What evidence proves it | The measurement table (change, tool, exit code, detected, seconds) and the state of the live namespace. |
-| How much is enough | Every change in the table is detected by at least one check. Where NIST leaves the policy to the organization, the lab chooses to fail on any undeclared role binding or network policy. |
-| How the tool in this module satisfies it | The harness (Step 3), the conformance check (Step 4) and drift_check.sh (Step 5). |
+| The operational question | Which objects can each tool see, which can it not see, and what covers the rest? |
+| What evidence proves it | The exit code and FAIL line of the combined check after an extra role binding is added, and the state of the live namespace. |
+| How much is enough | An extra role binding, which neither code base lists, is detected by the combined check. Where NIST leaves the policy to the organization, the lab chooses to fail on any undeclared role binding or network policy. |
+| How the tool in this module satisfies it | The conformance check (Step 3) and drift_check.sh (Step 4). |
 
 ## Section 6. Next Steps
 
@@ -1159,7 +943,6 @@ Each term is also explained the first time it appears. In Word, hover over an un
 | FedRAMP | The US program that sets security requirements for cloud services used by the federal government. |
 | Gate | A check that stops a change from going further when it fails. |
 | grep | A command that prints only the lines that match a pattern. |
-| Harness | A script that sets up a situation, runs the things you want to measure, and prints the results. |
 | Heredoc | A way to make a file by pasting its text between a first line such as cat > name <<'EOF' and a last line that says EOF. |
 | Idempotent | Safe to run again: a second run finds nothing to change and reports changed=0. |
 | Image | A packaged copy of a program and everything it needs to run. A container starts from an image. |
@@ -1190,7 +973,6 @@ Each term is also explained the first time it appears. In Word, hover over an un
 | Rule | A written condition that a tool checks. |
 | sed | A command that edits text as it passes through, often to replace one string with another. |
 | Service account | An identity for a program instead of a person. |
-| Standard library | The modules that come with Python itself, so a script that uses only them needs nothing installed. |
 | State file | A file Terraform keeps that records which live object belongs to each resource in its code. Without it Terraform does not know what it owns. |
 | STIG | Security Technical Implementation Guide: a DoD checklist of settings for one product. |
 | Tekton | The pipeline engine in OpenShift Pipelines. It runs each pipeline step in a container. |

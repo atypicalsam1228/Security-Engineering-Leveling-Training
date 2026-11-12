@@ -66,7 +66,7 @@ MODULE = {
     "controls": ["AC-6", "IA-5", "SC-28", "SC-7"],
     "mentions": ["CM-6", "CM-7", "CM-3", "SI-4", "SC-12"],
     "unit_values_ok": ["3 seconds"],
-    "minutes": {"hands_on": 52, "verify": 24},
+    "minutes": {"hands_on": 50, "verify": 24},
     "tools": [
         "OpenShift Container Platform",
         "Kubernetes secrets, RBAC and NetworkPolicy (included with OpenShift)",
@@ -568,22 +568,6 @@ MODULE = {
             "why": "Default-deny blocks every flow in both directions for every pod in the namespace. The workload needs an ingress rule for the approved caller, and the caller needs an egress rule. The workload gets no egress rule because it calls nothing.",
             "blocks": [
                 {
-                    "code": L(
-                        "mkdir -p /workspace/cps-4 && cd /workspace/cps-4",
-                        "oc extract configmap/secure-lab-kit -n secure-lab --to=. --confirm",
-                        "cat default-deny.yaml",
-                    ),
-                    "label": 'Extract and read the supplied default-deny file',
-                    "intro": 'You will now copy the supplied default-deny file from the cluster into your folder and print it. The file blocks all traffic in both directions for the namespace secure-lab.',
-                    "expect": 'Example only. The first command prints the name of the file it writes.\ndefault-deny.yaml\n(the contents of default-deny.yaml)',
-                    "look_for": ['The podSelector is {} and policyTypes lists Ingress and Egress with no allow list, so everything is blocked in both directions.', 'The namespace is secure-lab, so the rule applies only to this project.'],
-                    "lines": [
-                        MKROW,
-                        ("oc extract configmap/secure-lab-kit ... --confirm", "Writes the supplied default-deny.yaml into the current folder.", "The default-deny rule is supplied, so you spend your effort on the allow rules."),
-                        ("cat default-deny.yaml", "Prints the file so you read it before you apply it.", "Confirms the baseline is closed for every pod, in both directions, before you open anything."),
-                    ],
-                },
-                {
                     "code": FILE("allow-rules.yaml", L(
                         "apiVersion: networking.k8s.io/v1",
                         "kind: NetworkPolicy",
@@ -636,23 +620,28 @@ MODULE = {
                 },
                 {
                     "code": L(
-                        "cd /workspace/cps-4",
+                        "mkdir -p /workspace/cps-4 && cd /workspace/cps-4",
+                        "oc extract configmap/secure-lab-kit -n secure-lab --to=. --confirm",
+                        "cat default-deny.yaml",
                         "oc apply -f default-deny.yaml -f allow-rules.yaml --dry-run=server",
                         "oc apply -f default-deny.yaml -f allow-rules.yaml",
                         "oc get networkpolicy -n secure-lab",
                     ),
-                    "label": 'Apply the network policies and list them',
-                    "intro": 'You will now check both files with a dry run, apply them, and list the policies.',
-                    "expect": 'Example only. A policy that already exists shows configured, not created.\nnetworkpolicy.networking.k8s.io/default-deny created (server dry run)\nnetworkpolicy.networking.k8s.io/allow-api-client-ingress created (server dry run)\nnetworkpolicy.networking.k8s.io/allow-api-client-egress created (server dry run)\n(the same three lines again, without the dry run note)\nNAME                       POD-SELECTOR      AGE\nallow-api-client-egress    role=api-client   <age>\nallow-api-client-ingress   app=sample-api    <age>\ndefault-deny               <none>            <age>',
+                    "label": 'Extract the default-deny file, apply the network policies and list them',
+                    "intro": 'You will now copy the supplied default-deny file from the cluster into your folder and print it. The file blocks all traffic in both directions for the namespace secure-lab. Then you check it and allow-rules.yaml with a dry run, apply both, and list the policies.',
+                    "look_for": ['The podSelector is {} and policyTypes lists Ingress and Egress with no allow list, so everything is blocked in both directions.', 'The namespace is secure-lab, so the rule applies only to this project.'],
+                    "expect": 'Example only. A policy that already exists shows configured, not created. The first command prints the name of the file it writes.\ndefault-deny.yaml\n(the contents of default-deny.yaml)\nnetworkpolicy.networking.k8s.io/default-deny created (server dry run)\nnetworkpolicy.networking.k8s.io/allow-api-client-ingress created (server dry run)\nnetworkpolicy.networking.k8s.io/allow-api-client-egress created (server dry run)\n(the same three lines again, without the dry run note)\nNAME                       POD-SELECTOR      AGE\nallow-api-client-egress    role=api-client   <age>\nallow-api-client-ingress   app=sample-api    <age>\ndefault-deny               <none>            <age>',
                     "lines": [
-                        CDROW("where the three policy files are."),
+                        MKROW,
+                        ("oc extract configmap/secure-lab-kit ... --confirm", "Writes the supplied default-deny.yaml into the current folder.", "The default-deny rule is supplied, so you spend your effort on the allow rules."),
+                        ("cat default-deny.yaml", "Prints the file so you read it before you apply it.", "Confirms the baseline is closed for every pod, in both directions, before you open anything."),
                         ("-f default-deny.yaml -f allow-rules.yaml", "Applies the two files in one command.", "One command saves the closed baseline and the openings together, so there is no gap between them."),
                         ("oc get networkpolicy", "Lists the three policies.", "Lists what is now in force, so you can count the three policies before you test."),
                     ],
                 },
             ],
             "note": "A real workload also needs a rule that allows name lookup (DNS). This module calls the workload by its cluster address so the test needs no lookup.",
-            "action": "Extract and read default-deny.yaml. Paste the allow-rules block, then run the last block.",
+            "action": "Paste the allow-rules block, then run the last block, which extracts and reads default-deny.yaml before it applies the policies.",
             "checkpoint": "Three policies are listed.",
         },
         {
@@ -761,7 +750,7 @@ MODULE = {
                         "grep -c '<your' secret-read-rule.yaml || true",
                     ),
                     "label": 'Write the two missing condition lines',
-                    "intro": 'You will now write the two missing condition lines yourself. Before you run the block, replace each line that starts with and followed by an angle bracket with a real test, using the table in 4c and the shell rule as your pattern. Keep four spaces at the start of each line. Hint: "is one of" is written as in (a, b, c), and "begins with" is written as the words starts and with joined into one word, with no space. Do not open the reference answer yet. If you make a mistake, paste the scaffold block again and redo this one. If tail prints nothing, or the last line is not 0, paste the scaffold block again and redo this block.',
+                    "intro": 'You will now write the two missing condition lines yourself. Before you run the block, replace each line that starts with and followed by an angle bracket with a real test, using the table in 4c and the shell rule as your pattern. Keep four spaces at the start of each line. Hint: "is one of" is written as in (a, b, c), and "begins with" is written as the words starts and with joined into one word, with no space. If you make a mistake, paste the scaffold block again and redo this one. If tail prints nothing, or the last line is not 0, paste the scaffold block again and redo this block.',
                     "expect": 'Example only. Your wording may differ; the last line must be 0.\n    evt.type in (open, openat, openat2) and evt.is_open_read=true\n    and container.id != host and k8s.ns.name = secure-lab\n    and (your test on the program name)\n    and (your test on the file path)\n0',
                     "lines": [
                         CDROW("where secret-read-rule.yaml is."),
@@ -793,25 +782,8 @@ MODULE = {
                         ("oc rollout restart daemonset/falco", "Restarts Falco (a DaemonSet, which runs one copy on every node) so it loads the new rules. You do not wait for it here. It restarts while you write the check in the next step, and Test 5 waits for it.", "Falco reads its rules only when it starts, so a restart is what makes the new rule active."),
                     ],
                 },
-                {
-                    "code": L(
-                        "cd /workspace/cps-4",
-                        "mkdir -p answers",
-                        "oc extract configmap/secure-lab-answers -n secure-lab --to=answers --confirm",
-                        "cat answers/secret-read-rule.txt",
-                    ),
-                    "label": 'Only after you have tried: read the reference answer',
-                    "intro": 'You will now copy a finished rule from the cluster into a folder named answers and print it. Run this only after you have written and applied your own two lines. Compare the finished rule with yours. Different wording is fine; what counts is that your rule passes Tests 6 and 7 in Section 4.',
-                    "expect": 'Example only.\nsecret-read-rule.txt\n- rule: Secret File Read in secure-lab\n  (the finished rule, ending with the two lines you wrote)',
-                    "lines": [
-                        CDROW("where your files are."),
-                        ("mkdir -p answers", "Makes a separate folder, so the answer cannot overwrite your file.", "Keeps your work and the reference apart."),
-                        ("oc extract configmap/secure-lab-answers ... --to=answers", "Copies the reference file out of the cluster.", "The start state stored it there, so you can read it only when you choose to."),
-                        ("cat answers/secret-read-rule.txt", "Prints the finished rule.", "Lets you compare your two lines with a known-good pair."),
-                    ],
-                },
             ],
-            "action": "Paste the first two blocks to make runtime-patch.yaml and secure-lab-rules.yaml. Paste the scaffold block, then write the two condition lines yourself. Run the apply block. Read the reference answer last.",
+            "action": "Paste the first two blocks to make runtime-patch.yaml and secure-lab-rules.yaml. Paste the scaffold block, then write the two condition lines yourself. Run the apply block.",
             "checkpoint": "The workload rollout finishes with the new pod Running. The Falco restart has been issued and is not waited on. Your rule file has no placeholder left (the count is 0).",
         },
         {

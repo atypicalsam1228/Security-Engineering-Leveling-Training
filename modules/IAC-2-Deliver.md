@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 16 of 29 in the recommended order |
-| Timed work | About 73 minutes (55 hands-on, 18 verify) |
+| Sequence | Module 18 of 32 in the recommended order |
+| Timed work | About 67 minutes (49 hands-on, 18 verify) |
 | Standalone start | `lab start iac-2` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | Terraform (with the hashicorp/kubernetes provider), Gitea (in-lab git server), OpenShift Pipelines (Tekton), OpenShift Container Platform, oc, git, jq, python3, tkn (Tekton command-line tool) |
@@ -180,13 +180,14 @@ The table shows what each exit code means:
 
 - The repository on Gitea (the git server in your lab) already holds the provider file, which names the plugin Terraform loads and the kubeconfig (the file that holds the cluster address and your login) it uses.
 - You clone the repository, which copies it to your lab shell.
-- You then load the provider, write the first two resources and ask Terraform to check them.
+- You then load the provider and write the first two resources.
+- Step 2 checks them with the rest.
 
 What this step adds (thick lines and outlines are new):
 
 ![A baseline reaches the cluster only through a reviewed plan, after step 1](img/IAC-2-step-1.png)
 
-- You clone the repository from Gitea into your lab shell and write the first Terraform file, for the namespace and its resource quota. Terraform checks it. Nothing is sent to the cluster.
+- You clone the repository from Gitea into your lab shell and write the first Terraform file, for the namespace and its resource quota. Nothing is sent to the cluster.
 
 #### 1a. Clone the repository and load the provider
 
@@ -287,37 +288,11 @@ Example only. A file that was written prints ok. The next block uses it.
 | namespace = kubernetes_namespace_v1.lab.metadata[0].name | Takes the namespace name from the namespace resource instead of typing it again. | Terraform sees the link and creates the namespace first. Typing the name twice would hide that order. |
 | hard = { ... } | The limits: at most 10 pods, and totals for requested processor and memory. | The lab picks these values. They are small on purpose, and an organization sets its own. |
 
-#### 1c. Check the file
+> **YOUR TURN:** Run the two blocks in order.
 
-You will now check the file for mistakes.
+> **CHECKPOINT:** init prints Terraform has been successfully initialized, and the second block prints ok. If init fails, copy the whole command and the error and ask your AI assistant.
 
-- Nothing is sent to the cluster.
-- The first plan comes in Step 2, when all five objects exist.
-
-```bash
-cd /workspace/iac-2/iac-baseline
-terraform fmt -check
-terraform validate
-```
-
-**Expected output:**
-
-```
-Example only. Your output will differ.
-Success! The configuration is valid.
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| cd /workspace/iac-2/iac-baseline | Moves into the repository folder. | Terraform reads the files in the folder you stand in. |
-| terraform fmt -check | Checks that the file is laid out the standard way. It prints nothing when it is. | A fixed layout keeps later changes small and easy to read in a pull request. |
-| terraform validate | Checks the files for mistakes in names and arguments, without contacting the cluster. | Catches a typo before a plan does, and tells you where it is. |
-
-> **YOUR TURN:** Run the three blocks in order.
-
-> **CHECKPOINT:** The check prints Success! The configuration is valid. If init or validate fails, copy the whole command and the error and ask your AI assistant.
-
-> **TAKEAWAY:** terraform validate catches a typo before a plan does, and git records who made each change.
+> **TAKEAWAY:** git records who made each change, and the repository is where the baseline starts.
 
 **How this meets the control**
 
@@ -506,6 +481,8 @@ true
 | Part | What it does | Why you run it |
 | --- | --- | --- |
 | cd /workspace/iac-2/iac-baseline | Moves into the repository folder. | Terraform reads the files in the folder you stand in. |
+| terraform fmt -check | Checks that the file is laid out the standard way. It prints nothing when it is. | A fixed layout keeps later changes small and easy to read in a pull request. |
+| terraform validate | Checks the files for mistakes in names and arguments, without contacting the cluster. | Catches a typo before a plan does, and tells you where it is. |
 | terraform plan -out good.tfplan | Saves a plan for the whole folder, now five objects. | This file is the one you will apply in Step 4, after review. The name says it is the good one. |
 | terraform show -json good.tfplan > plan.json | Writes the saved plan as JSON into the file plan.json. | The gate reads this file, and so does the gate task in the cluster, which has no Terraform. |
 | jq -r ... plan.json | Lists the action, type and name of each change. | Five creates and nothing else is what a first plan of this baseline should show. |
@@ -550,11 +527,11 @@ your access.tf matches the reference
 
 - **CM-6:** The network policy, the binding and your own role rule put the settings in files, with only get and list on pods. The plan of five objects shows those settings before anything is applied.
 
-### Step 3. Write the plan gate and run it on the good plan (CM-3 Configuration Change Control)
+### Step 3. Save the plan gate and run it on the good plan (CM-3 Configuration Change Control)
 
-**Learning point: Writing a gate that reads plan.json and fails on wildcards, cluster-admin bindings and missing security objects, and running it on the good plan and on an empty input, proves it passes what it should and fails what it should.**
+**Learning point: Saving a gate that reads plan.json and fails on wildcards, cluster-admin bindings and missing security objects, and running it on the good plan and on an empty input, proves it passes what it should and fails what it should.**
 
-- Write the gate before anything is reviewed, so the review has a rule to apply.
+- Put the gate in place before anything is reviewed, so the review has a rule to apply.
 - The script reads plan.json from standard input (the stream a program reads its data from) and prints one FAIL line for each broken rule.
 - The script uses only what Python already has, so it runs in your lab shell and later in the cluster.
 
@@ -562,7 +539,7 @@ What this step adds (thick lines and outlines are new):
 
 ![A baseline reaches the cluster only through a reviewed plan, after step 3](img/IAC-2-step-3.png)
 
-- You write the plan gate, a Python script that reads plan.json and fails on a wildcard, a cluster-admin binding, a missing network policy or quota, or an empty input. You run it on your own machine first.
+- You save the plan gate, a Python script that reads plan.json and fails on a wildcard, a cluster-admin binding, a missing network policy or quota, or an empty input. You run it on your own machine first.
 
 #### 3a. Save the plan gate as gate.py
 
@@ -902,36 +879,11 @@ Example only. A file that was written prints ok. The next block uses it.
 | if test "$code" = 1 | On 1 says the check itself failed. | An error must never look like no drift. |
 | exit $code | Ends with the same exit code that Terraform gave. | A schedule or a person can act on the number without parsing text. |
 
-#### 5b. Run the drift check on the clean baseline
+> **TIP:** If the first run, in Test 1, says drift: FOUND and you changed nothing, read drift.txt. The cluster may add labels or annotations of its own to a new namespace, and the ignore lists in providers.tf may not cover them. Copy the whole attribute name and the plan text from drift.txt and ask your AI assistant.
 
-You will now run the check right after the apply, when the cluster and the files should match.
+> **YOUR TURN:** Run the block to save the script. Test 1 runs it.
 
-```bash
-cd /workspace/iac-2/iac-baseline
-bash drift-check.sh; echo "exit code: $?"
-```
-
-**Expected output:**
-
-```
-Example only.
-drift: none
-exit code: 0
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| cd /workspace/iac-2/iac-baseline | Moves into the repository folder. | The script and the Terraform files are in this folder. |
-| bash drift-check.sh | Runs the script you saved. | Runs the check the way you will run it after a change. |
-| echo "exit code: $?" | Prints the exit code of the script. | Shows the answer as a number. |
-
-![Output from a real lab run: Run the drift check on the clean baseline](img/IAC-2-shot-5b.png)
-
-> **TIP:** If this first run says drift: FOUND and you changed nothing, read drift.txt. The cluster may add labels or annotations of its own to a new namespace, and the ignore lists in providers.tf may not cover them. Copy the whole attribute name and the plan text from drift.txt and ask your AI assistant.
-
-> **YOUR TURN:** Run the first block to make the script, then run the second block.
-
-> **CHECKPOINT:** The script prints drift: none and the exit code is 0.
+> **CHECKPOINT:** The block prints ok, so drift-check.sh is saved. Test 1 runs it for the first time.
 
 > **TAKEAWAY:** Exit 0 means the cluster matches the files; exit 2 means drift was found and needs a decision.
 
@@ -1111,8 +1063,8 @@ exit code: 0
 | Control | What it requires, in plain words | Tool or service | Where this module covers it |
 | --- | --- | --- | --- |
 | CM-2 Baseline Configuration | Develop, document and maintain a current baseline configuration of the system under configuration control. Here the baseline is the Terraform files, kept in a git repository with its history. NIST leaves the review frequency organization-defined; FedRAMP assigns at least annually and when a significant change occurs. | Terraform files in a Gitea repository, with a saved plan for every change. Explained in section 2.1. | Section 3, Steps 1 and 2: write the baseline as files and plan it. Step 4: the files reach main through a pull request. Section 4, Test 1. |
-| CM-3 Configuration Change Control | Review proposed configuration-controlled changes and approve or disapprove them before they are implemented. Here a gate and a protected branch decide, and only an approved plan is applied. | The plan gate script, a Tekton gate task, Gitea branch protection and a saved Terraform plan. Explained in section 2.2. | Section 3, Step 3: write the gate. Step 4: the gate task blocks or allows the merge and the saved plan is applied after it. Section 4, Test 2. |
-| CM-6 Configuration Settings | Establish and implement configuration settings, and monitor and control changes to them. The requirement covered is item d: here a drift check watches for changes made outside the files. | A drift check built on terraform plan -detailed-exitcode. Explained in section 2.3. | Section 3, Step 5: write the drift check. Section 4, Tests 1 and 3: it exits 0 on a match and 2 after a hand edit. |
+| CM-3 Configuration Change Control | Review proposed configuration-controlled changes and approve or disapprove them before they are implemented. Here a gate and a protected branch decide, and only an approved plan is applied. | The plan gate script, a Tekton gate task, Gitea branch protection and a saved Terraform plan. Explained in section 2.2. | Section 3, Step 3: save and run the gate. Step 4: the gate task blocks or allows the merge and the saved plan is applied after it. Section 4, Test 2. |
+| CM-6 Configuration Settings | Establish and implement configuration settings, and monitor and control changes to them. The requirement covered is item d: here a drift check watches for changes made outside the files. | A drift check built on terraform plan -detailed-exitcode. Explained in section 2.3. | Section 3, Step 5: save the drift check. Section 4, Tests 1 and 3: it exits 0 on a match and 2 after a hand edit. |
 
 ### What each control is for
 

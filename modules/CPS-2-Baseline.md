@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 6 of 29 in the recommended order |
-| Timed work | About 59 minutes (38 hands-on, 21 verify) |
+| Sequence | Module 6 of 32 in the recommended order |
+| Timed work | About 61 minutes (40 hands-on, 21 verify) |
 | Standalone start | `lab start cps-2` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | OpenShift Container Platform, OpenShift Compliance Operator, Pod security admission (built into OpenShift), oc, jq |
@@ -225,6 +225,9 @@ harden-lab   Active   <age>   ...,pod-security.kubernetes.io/audit=restricted,po
 | --- | --- | --- |
 | cd ... | Moves into the module folder from Step 1, where the supplied files are. | Every block starts in the folder that holds its files, so it works on its own. |
 | cat namespace.yaml | Prints the supplied file so you read it before you apply it. | Reading a file before you apply it shows what the cluster is about to be told, which is the habit that stops surprises. |
+| namespace.yaml: name: harden-lab | Names the namespace the labels go on. | The labels apply to this one namespace, so nothing else on the cluster changes. |
+| namespace.yaml: pod-security.kubernetes.io/enforce: restricted | Makes the cluster refuse any new pod that breaks the restricted level. | This is the label that does the blocking, and Step 4 proves it. |
+| namespace.yaml: .../warn: restricted and .../audit: restricted | Warn prints a message when a pod would break the level. Audit writes a record of it. | They tell you about a problem without blocking it, so you see what enforce would do. |
 | --dry-run=server | Asks the cluster to check the file without saving it. This is called a dry run. | Lets the cluster check the labels first. A mistake shows up here and changes nothing. |
 | oc apply -f namespace.yaml | Saves the labels. A warning may follow that names settings the running pod is missing. | Turns on the pod security check for this namespace, so the refusal test in Step 4 has something to refuse with. |
 | --show-labels | Prints the labels now on the namespace. | Reads the labels back from the cluster, which proves the apply saved them. |
@@ -288,6 +291,14 @@ Resource      Used     Hard
 | --- | --- | --- |
 | cd ... | Moves into the module folder from Step 1, where the supplied files are. | Every block starts in the folder that holds its files, so it works on its own. |
 | --patch-file workload-patch.yaml | Merges the supplied settings into the live workload. Containers match by name. | This is the step that hardens the running workload, so its pod now meets the level the labels enforce. |
+| workload-patch.yaml: runAsNonRoot: true | The pod must run as a user that is not root. | A process that is not root has less power if it is taken over. |
+| workload-patch.yaml: seccompProfile: type: RuntimeDefault | Limits which system calls the pod may make to the default list of the container runtime. | A shorter list of allowed calls leaves less for an attacker to use. The restricted level requires it. |
+| workload-patch.yaml: allowPrivilegeEscalation: false | A process cannot gain more power than the one that started it. | Stops a small flaw turning into a full takeover. The restricted level requires it. |
+| workload-patch.yaml: readOnlyRootFilesystem: true | The container's files cannot be written to. | Malicious code cannot save a file inside the container. |
+| workload-patch.yaml: capabilities: drop: [ALL] | Removes every special Linux power from the container. | The web server needs none of them, and the restricted level requires dropping them. |
+| workload-patch.yaml: resources: requests and limits | Requests tell the cluster how much to reserve. The memory limit is the most the container may use. | A limit stops one container using all the memory. Without one, the quota in quota.yaml would refuse the pod. |
+| quota.yaml: pods: 5, requests.memory: 256Mi, limits.memory: 512Mi | Caps the namespace at five pods and sets totals for requested and limited memory. | One namespace cannot take the resources of the rest of the cluster. |
+| default-deny.yaml: podSelector: {} with policyTypes Ingress and Egress | Matches every pod in the namespace and lists no allowed traffic in or out. | Blocks all pod traffic until another rule allows some. Nothing is allowed by accident. |
 | oc rollout status | Waits for the rollout, which is the replacement of the old pod by a new one, to finish. A pod that breaks the restricted level never starts. | A patch replaces the pod. Waiting shows whether the new, hardened pod starts or is refused. |
 | oc apply -f quota.yaml -f default-deny.yaml | Saves the namespace quota and the network rule. | Puts the limits and the network rule in place after the patch, because a memory quota refuses any new pod that has no memory limit. |
 | oc describe quota | Shows how much of the quota the workload uses. Used cannot exceed Hard. | Shows the quota counting the new pod, so you know the cap is active and the workload fits under it. |
@@ -349,6 +360,8 @@ READY
 | --- | --- | --- |
 | cd ... | Moves into the module folder from Step 1, where the supplied files are. | Every block starts in the folder that holds its files, so it works on its own. |
 | cat scan.yaml | Prints the two supplied objects: the tailored profile and the binding that starts the scan. | Shows which rules the scan will check before it starts, so the result is not a surprise. |
+| scan.yaml: TailoredProfile enableRules | Lists the checklist rules this scan runs. A rule that is not on this cluster was left out at lab start. | A short list makes the scan finish in about a minute and keeps each result about workload hardening. |
+| scan.yaml: ScanSettingBinding profiles and settingsRef | Points at the profile above and at the default scan settings, which start the scan. | The binding is what starts a run, in report-only mode, so nothing on the cluster changes. |
 | oc apply -f scan.yaml | Saves both. The operator creates a suite (the record of one scan run) and one scan. | Starts the scan. It runs for about a minute, which is the time you use for the bad pod test. |
 | oc wait ... READY | Waits up to two minutes for the operator to accept the profile. If it times out, the next line shows the state. | A scan built on a rejected profile never runs. Waiting here finds that early. |
 | jsonpath='{.status.state}' | Prints the profile state. READY means the operator accepted every rule name. | Prints the state so you can read it yourself if the wait timed out. |
@@ -379,6 +392,8 @@ Error from server (NotFound): pods "bad-pod" not found
 | --- | --- | --- |
 | cd ... | Moves into the module folder from Step 1, where the supplied files are. | Every block starts in the folder that holds its files, so it works on its own. |
 | cat bad-pod.yaml | Prints the supplied pod that asks for host networking (using the node's own network) and a privileged container (one with node-level power). As cluster-admin you may ask for both, so only the pod security labels from Step 2 stand in the way. | Read what the pod asks for, so you know exactly what the refusal is for. |
+| bad-pod.yaml: hostNetwork: true | The pod asks to use the node's own network. | The restricted level refuses it, because the pod could then see traffic that is not its own. |
+| bad-pod.yaml: privileged: true | The container asks for node-level power. | The restricted level refuses it, because a privileged container can escape to the node. |
 | oc apply -f bad-pod.yaml | Tries to create it. The enforce label should refuse it with a Forbidden message that names what was wrong. The wording differs between releases. | This is the test of the labels from Step 2: a cluster that enforces them refuses the request. |
 | oc get pod bad-pod | Shows that the pod does not exist: NotFound. | Confirms the refusal left nothing behind. A pod that exists would mean the labels do not enforce. |
 
@@ -654,6 +669,7 @@ Each term is also explained the first time it appears. In Word, hover over an un
 | grep | A command that prints only the lines that match a pattern. |
 | Hardening baseline | A fixed set of secure settings that every workload of a kind must carry. |
 | Host networking | A pod setting that puts the pod on the node's own network instead of a network of its own. |
+| Ingress | The way traffic from outside the cluster reaches a program inside it. |
 | jq | A command-line tool that reads JSON and picks out the fields you ask for. |
 | JSON | A plain-text data format of names and values written inside curly braces. oc can print it and jq can read it. |
 | Kubernetes | The open-source system that runs and manages containers across servers. OpenShift is built on it. |
@@ -682,6 +698,7 @@ Each term is also explained the first time it appears. In Word, hover over an un
 | Rollout | The replacement of old pods by new ones after you change a deployment. |
 | Root | The all-powerful account on a computer. A program that runs as root can change almost anything. |
 | Rule | A written condition that a tool checks. |
+| Runtime | The time when a program is running, as opposed to when it is written or built. |
 | Scan | A run that reads cluster settings and compares each one with a rule from a checklist. |
 | Scan setting binding | An object that tells the Compliance Operator which profile to scan with, and starts the scan. |
 | Security context | The safety settings on a pod or container, such as which user it runs as and which extra powers (capabilities) it keeps. |

@@ -443,7 +443,7 @@ MODULE = {
             "controls": [
                 {"id": "RA-5 Vulnerability Monitoring and Scanning", "how": "The control asks for scanning of the system and its hosted applications, and a scan needs to know what is installed. This step writes an SBOM (a list of every package in the image) and scans the list instead of the image."},
             ],
-            "learn": "Writing the image's package list to a file and scanning that file gives a fourth scan that reads the list instead of the image. The comparison with the Step 1 count shows whether the list is missing packages.",
+            "learn": "Writing the image's package list to a file and scanning that file gives a fourth scan that reads the list instead of the image. Writing the scan down in scans.tsv gives the hand-off script a line for it.",
             "takeaway": "A stored package list can be scanned again later, when the vulnerability database has changed.",
             "why": "An SBOM (software bill of materials) is a machine-readable list of the packages inside an image, and here you write one for the same image and scan it with trivy sbom. The CycloneDX format (a standard SBOM format) writes the list alone, without findings. The image is downloaded again, so this step needs internet from the lab shell.",
             "blocks": [
@@ -455,22 +455,20 @@ MODULE = {
                         "jq '{format: .bomFormat, spec: .specVersion, components: (.components | length)}' image-sbom.json\n"
                         "trivy sbom --scanners vuln --quiet --format json --output sbom.json image-sbom.json\n"
                         "printf 'sbom\\t%s\\tsbom.json\\t%s\\n' \"image-sbom.json\" \"$?\" >> scans.tsv\n"
-                        "jq '[.Results[]?.Vulnerabilities[]?] | length' sbom.json image.json"
                     ),
-                    "label": 'Write the SBOM, scan it and compare with the image scan',
-                    "intro": 'You will now write the list of packages of the image to a file, count its entries, scan that file, write the scan down in scans.tsv, and compare the finding counts with the image scan.',
-                    "expect": 'Example only. Your counts will differ.\n{\n  "format": "CycloneDX",\n  "spec": "<version>",\n  "components": <n>\n}\n<n>\n<n>\n(the first number is the SBOM scan, the second is the image scan from Step 1; they should be close, and a difference of a few findings is possible)',
+                    "label": 'Write the SBOM and scan it',
+                    "intro": 'You will now write the list of packages of the image to a file, count its entries, scan that file, and write the scan down in scans.tsv.',
+                    "expect": 'Example only. Your counts will differ.\n{\n  "format": "CycloneDX",\n  "spec": "<version>",\n  "components": <n>\n}',
                     "lines": [
                         ("trivy image ... --output image-sbom.json", "Writes the inventory of the image in CycloneDX JSON. With this format Trivy lists the packages and does not look for flaws.", "The inventory is a file you can store and scan again later, without the image."),
                         ("jq '{format: ..., components: ...}'", "Prints the format name, its version and how many components (packages and the operating system) the list holds.", "Shows the file is a real CycloneDX list with entries, before you scan it."),
                         ("trivy sbom --scanners vuln ... image-sbom.json", "Scans the list for known package flaws and saves a JSON report in the same shape as the other scans.", "This is the fourth scan: it finds flaws from the inventory alone, which is how you re-check a stored release."),
                         ("printf 'sbom\\t...' >> scans.tsv", "Adds the fourth line to the list with the exit code of the scan.", "The hand-off script treats this scan like the others, so a failed one cannot read as clean."),
-                        ("jq ... sbom.json image.json", "Prints the number of findings in each report.", "A large gap would mean the list is missing packages, so you compare before you trust it."),
                     ],
                 }
             ],
             "note": "An SBOM written by Trivy carries extra properties that Trivy reads back, so a list from another tool can give less accurate results.",
-            "action": "Run the commands and read the two finding counts.",
+            "action": "Run the commands and read the component count.",
             "checkpoint": "The SBOM has a CycloneDX format and components above zero, and scans.tsv shows four lines.",
         },
         {

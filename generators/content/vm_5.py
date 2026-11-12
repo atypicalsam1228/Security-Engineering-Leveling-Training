@@ -389,7 +389,7 @@ MODULE = {
     "controls": ["RA-5", "SI-2", "SA-11"],
     "mentions": ["CA-5", "CM-3", "RA-7", "SI-2(3)", "VM-4"],
     "unit_values_ok": ["15 days", "30 days", "30 day", "90 days"],
-    "minutes": {"hands_on": 55, "verify": 18},
+    "minutes": {"hands_on": 52, "verify": 18},
     "tools": [
         "OpenShift Container Platform",
         "OpenShift Pipelines (Tekton)",
@@ -742,17 +742,15 @@ MODULE = {
                     "code": (
                         "cd /workspace/vm-5\n"
                         "CATALOG_URL=https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json\n"
-                        "curl -fsS \"$CATALOG_URL\" | jq -e '[.vulnerabilities[].cveID] | sort | select(length > 0)' > exploited-ids.json\n"
-                        "jq length exploited-ids.json"
+                        "curl -fsS \"$CATALOG_URL\" | jq -e '[.vulnerabilities[].cveID] | sort | select(length > 0)' > exploited-ids.json"
                     ),
                     "label": 'Download the known-exploited list',
-                    "intro": 'You will now download the KEV catalog, keep only its CVE IDs in a file, and count them.',
+                    "intro": 'You will now download the KEV catalog, keep only its CVE IDs in a file.',
                     "expect": 'Example only. The count grows as the catalog grows.\n<n>',
                     "lines": [
                         ("curl -fsS \"$CATALOG_URL\"", "Downloads the catalog. -f makes curl fail on an HTTP error, -s hides the progress bar, -S still shows an error.", "A failed download must not leave an error page to be read as a list."),
                         ("jq -e '[.vulnerabilities[].cveID] | sort | select(length > 0)'", "Keeps the CVE ID of each entry in a sorted list, and produces nothing when the list is empty, which makes jq -e exit with a non-zero code.", "The gate needs only the IDs, and an empty list would read as nothing exploited."),
                         ("> exploited-ids.json", "Saves the list as a small file that goes into the ConfigMap in Step 4.", "The platform owns the list, so every pipeline reads the same one."),
-                        ("jq length exploited-ids.json", "Prints how many IDs the list holds.", "Shows the list is not empty before you rely on it."),
                     ],
                 },
                 {
@@ -849,33 +847,14 @@ MODULE = {
                         ("not yet right:", "Lists the cases that came out wrong, by name.", "The name tells you which condition to look at."),
                     ],
                 },
-                {
-                    "code": "cd /workspace/vm-5\ndiff rule_match.py reference-rule_match.py || true",
-                    "label": 'Compare with the reference answer, only after you have tried',
-                    "intro": 'You will now compare your file with the reference answer. Run this block only after the check says ok, or after you have tried for about ten minutes. Different lines are fine if your check says ok; to see the whole reference answer, type cat reference-rule_match.py.',
-                    "expect": 'Example only. Nothing prints when your file is the same as the reference. Otherwise each differing line is shown, with < for yours and > for the reference.',
-                    "lines": [
-                        ("diff rule_match.py reference-rule_match.py", "Shows the lines where your file differs from the reference.", "Another way of writing the same condition is fine. A real difference is worth understanding."),
-                        ("|| true", "diff exits with 1 when the files differ, which is not an error here.", "Without it the shell would treat the difference as a failure."),
-                    ],
-                },
-                {
-                    "code": "cd /workspace/vm-5 && cat exceptions-sample.json",
-                    "label": 'Read the sample exceptions and predict their states',
-                    "intro": 'You will now print the four sample exception entries so you can work out which are active, expired and invalid on 2026-10-29.',
-                    "expect": 'Example only. Four entries are printed, each with its fields and expiry date.',
-                    "lines": [
-                        ("cat exceptions-sample.json", "Prints the four sample entries.", "You predict each state from the fields and the expiry before the gate classifies them."),
-                    ],
-                },
             ],
-            "action": "Run the first block and read the two files. Paste the second block. Write your three conditions and run the third block. Run the check, fix your lines until it says ok, and only then compare with the reference. Then, before the code tells you, run the last block and work out which of the four sample entries are active, expired and invalid on 2026-10-29.",
-            "checkpoint": "The check prints ok: all 10 cases, and you can name which of the four sample entries should be active, expired and invalid on 2026-10-29.",
+            "action": "Run the first block and read the two files. Paste the second block. Write your three conditions and run the third block. Run the check and fix your lines until it says ok. Only then read reference-rule_match.py with cat, and compare it with yours.",
+            "checkpoint": "The check prints ok: all 10 cases.",
             "note": "Spec for matches: a rule matches a finding only when every condition the rule names holds, and a condition the rule does not name is ignored. The five conditions, in order, are severity, fix, exploited, minimum age in days, and exposure. The first two are given.",
         },
         {
             "title": "Read the ledger, write the gate, and run it on fixtures",
-            "learn": "Running the gate on the supplied fixtures with a fixed date shows three findings block with named rules and the exception classification matches the prediction from Step 2.",
+            "learn": "Running the gate on the supplied fixtures with a fixed date shows three findings block with named rules and the sample exceptions are classified as active, expired and invalid.",
             "takeaway": "Exit code 1 means findings blocked; exit code 2 means the gate could not decide; a gate that cannot decide must fail closed.",
             "controls": [
                 {"id": "SI-2 Flaw Remediation", "how": "The control, through its SI-2(3) enhancement, asks for the time between flaw identification and remediation to be measured. You read the ledger code that records the first-seen and fixed dates, and running the gate reports the time to fix as a count, a mean and a maximum."},
@@ -926,7 +905,7 @@ MODULE = {
                         ("gate.py --scan scan-before.json ...", "Runs the gate on the fixture scan with the date fixed. The exposure is internal, the default.", "Shows the gate on a known input, so you can check its answer before it runs in a pipeline."),
                         ("echo \"exit code: $?\"", "Shows the gate's exit code.", "The exit code is what a pipeline reads, so you see here what it will see."),
                         ("jq -c '.blocking[] | ...'", "Lists each blocking finding and the rules it matched.", "Shows which rule blocks which finding, which is what a team would be told."),
-                        ("jq -c .exceptions", "Shows how many entries were active, expired and invalid.", "Checks that the sample exceptions are classified the way you predicted in Step 2."),
+                        ("jq -c .exceptions", "Shows how many entries were active, expired and invalid.", "Checks that the gate classifies each sample exception from its fields and expiry."),
                     ],
                 },
             ],

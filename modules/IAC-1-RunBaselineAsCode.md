@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 9 of 29 in the recommended order |
-| Timed work | About 62 minutes (45 hands-on, 17 verify) |
+| Sequence | Module 10 of 32 in the recommended order |
+| Timed work | About 56 minutes (39 hands-on, 17 verify) |
 | Standalone start | `lab start iac-1` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | OpenShift Container Platform, Terraform (free, open source), Ansible (free, open source), oc, jq |
@@ -224,11 +224,11 @@ versions.tf
 | jq -j --arg k "$f" '.data[$k]' | Prints the stored text exactly as it is, with no extra line at the end. | Exact text matters: a changed file would be a different baseline. |
 | ls baseline / wc -l | Lists the Terraform files and counts the lines in the main one. | A quick check that the files arrived and the main file is the size you expect. |
 
-#### 1b. Read the main file
+#### 1b. Read the three Terraform files
 
-You will now read baseline/main.tf, the file you just saved.
+You will now read main.tf, variables.tf and versions.tf, the files you just saved, shown one after the other.
 
-- You read this file and do not type it.
+- You read these files and do not type them.
 
 Look for these as you read:
 
@@ -236,8 +236,11 @@ Look for these as you read:
 - The file holds no commands and no steps. It lists what should exist, and Terraform works out how to get there, which is what declarative means.
 - The default-deny block has a count line. It builds the policy once when the switch is true and not at all when it is false, so one value can switch the protection off.
 - The role binding gives the read-only role to a service account named report-reader. This module does not create that account with Terraform. Step 4 adds it with Ansible.
+- Three variables with default values: the namespace name, the pod limit and the default-deny switch. A variable file can give a variable a different value. Test 2 in Section 4 does exactly that.
+- The provider settings pin one exact version, point at the lab kubeconfig (the file that tells a tool how to reach the cluster) and list the annotations and labels the platform adds to the namespace, which Terraform must ignore.
 
 ```hcl
+# main.tf
 resource "kubernetes_namespace_v1" "lab" {
   metadata {
     name = var.namespace
@@ -303,37 +306,7 @@ resource "kubernetes_role_binding_v1" "reader" {
   }
 }
 
-```
-
-**Expected output:**
-
-```
-Nothing prints. This block is for reading.
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| kubernetes_namespace_v1 "lab" | The namespace that holds everything else. Its name comes from a variable. | Everything the baseline builds lives in one namespace, so it is easy to look at and to remove. |
-| kubernetes_resource_quota_v1 "limits" | A limit on how many pods the namespace may run. The limit comes from a variable. | A quota stops one namespace from using more than its share. |
-| kubernetes_namespace_v1.lab.metadata[0].name | A reference to the name of the namespace. Terraform learns from it that the namespace must exist first. | References are how Terraform knows the order to build things in. |
-| count = var.enable_default_deny ? 1 : 0 | Builds the default-deny policy once if the switch is true and not at all if it is false. | A switch like this is a place where a protection can be turned off by changing one value. |
-| pod_selector {} | An empty selector, which means every pod in the namespace. | A default-deny policy applies to all pods, so nothing is missed. |
-| policy_types = ["Ingress", "Egress"] | Blocks traffic coming in and going out, because no allow rules are listed. | With no allow rules, blocking both directions leaves only what you allow on purpose later. |
-| kubernetes_role_v1 "reader" | A role that may only get and list config maps. | Read-only is the smallest access that still lets the account do a job. |
-| kubernetes_role_binding_v1 "reader" | Gives that role to the service account report-reader in this namespace. | A role does nothing until it is bound to an identity. |
-
-#### 1c. Read the variables and the provider settings
-
-You will now read variables.tf and versions.tf, two more files you saved, shown one after the other.
-
-- You read these files and do not type them.
-
-Look for these as you read:
-
-- Three variables with default values: the namespace name, the pod limit and the default-deny switch. A variable file can give a variable a different value. Test 2 in Section 4 does exactly that.
-- The provider settings pin one exact version, point at the lab kubeconfig (the file that tells a tool how to reach the cluster) and list the annotations and labels the platform adds to the namespace, which Terraform must ignore.
-
-```hcl
+# variables.tf
 variable "namespace" {
   type    = string
   default = "iac-lab"
@@ -349,6 +322,7 @@ variable "enable_default_deny" {
   default = true
 }
 
+# versions.tf
 terraform {
   required_version = ">= 1.11"
 
@@ -377,6 +351,14 @@ Nothing prints. This block is for reading.
 
 | Part | What it does | Why you run it |
 | --- | --- | --- |
+| kubernetes_namespace_v1 "lab" | The namespace that holds everything else. Its name comes from a variable. | Everything the baseline builds lives in one namespace, so it is easy to look at and to remove. |
+| kubernetes_resource_quota_v1 "limits" | A limit on how many pods the namespace may run. The limit comes from a variable. | A quota stops one namespace from using more than its share. |
+| kubernetes_namespace_v1.lab.metadata[0].name | A reference to the name of the namespace. Terraform learns from it that the namespace must exist first. | References are how Terraform knows the order to build things in. |
+| count = var.enable_default_deny ? 1 : 0 | Builds the default-deny policy once if the switch is true and not at all if it is false. | A switch like this is a place where a protection can be turned off by changing one value. |
+| pod_selector {} | An empty selector, which means every pod in the namespace. | A default-deny policy applies to all pods, so nothing is missed. |
+| policy_types = ["Ingress", "Egress"] | Blocks traffic coming in and going out, because no allow rules are listed. | With no allow rules, blocking both directions leaves only what you allow on purpose later. |
+| kubernetes_role_v1 "reader" | A role that may only get and list config maps. | Read-only is the smallest access that still lets the account do a job. |
+| kubernetes_role_binding_v1 "reader" | Gives that role to the service account report-reader in this namespace. | A role does nothing until it is bound to an identity. |
 | variable "namespace" | The name of the namespace, default iac-lab. | One place to see and change the name. |
 | variable "pod_limit" | The pod limit as text, default 10. | The quota value comes from here, so a changed value shows up as a change in the plan. |
 | variable "enable_default_deny" | The switch for the default-deny policy, default true. | Protections that can be switched need a default that keeps them on. |
@@ -385,7 +367,7 @@ Nothing prints. This block is for reading.
 | config_path | The lab kubeconfig, the file that says how to reach your cluster and as whom. | Without it the provider would have to guess which cluster to change. |
 | ignore_annotations / ignore_labels | Tells the provider to leave alone the annotations and labels that OpenShift and OpenShift Pipelines add to the namespace by themselves. | Without it every plan would try to strip them, and the plan would never report "no changes" even when nothing was changed by hand. |
 
-#### 1d. Initialize the folder and validate it
+#### 1c. Initialize the folder and validate it
 
 You will now let Terraform prepare the folder and check that the files are well formed.
 
@@ -415,9 +397,9 @@ Success! The configuration is valid.
 | terraform init -input=false | Sets up the folder: installs the provider the files ask for, from a copy kept in the lab, and never asks a question. | Nothing can run until the provider is installed. The lab keeps a local copy, so no internet is needed. |
 | terraform validate | Checks that the files are well formed and that every setting is one the provider knows. | A typo is found here, before the cluster is touched. |
 
-![Output from a real lab run: Initialize the folder and validate it](img/IAC-1-shot-1d.png)
+![Output from a real lab run: Initialize the folder and validate it](img/IAC-1-shot-1c.png)
 
-> **YOUR TURN:** Run the first block and read the next two. Find the line that can switch the default-deny policy off. Then run the last block.
+> **YOUR TURN:** Run the first block, read the second, and find the line that can switch the default-deny policy off. Then run the last block.
 
 > **CHECKPOINT:** baseline holds four files, init says it was successfully initialized, and validate says the configuration is valid. If validate prints an error, stop, copy the whole command and the error and ask your AI assistant.
 
@@ -574,7 +556,6 @@ cd /workspace/iac-1/baseline
 terraform plan -input=false -detailed-exitcode -out=repair.plan
 echo "exit code: $?"
 terraform show -no-color repair.plan | grep -E 'will be|pods'
-terraform show -json repair.plan | jq -c '[.resource_changes[] | select(.change.actions != ["no-op"]) | {address, actions: .change.actions}]'
 ```
 
 **Expected output:**
@@ -585,7 +566,6 @@ Plan: 0 to add, 1 to change, 0 to destroy.
 exit code: 2
   # kubernetes_resource_quota_v1.limits will be updated in-place
           ~ "pods" = "50" -> "10"
-[{"address":"kubernetes_resource_quota_v1.limits","actions":["update"]}]
 ```
 
 | Part | What it does | Why you run it |
@@ -595,9 +575,6 @@ exit code: 2
 | -out=repair.plan | Saves this plan too. | Same rule as before: you apply the plan you read. |
 | echo "exit code: $?" | Prints the exit code of the plan command, the one just before it. | Shows the signal a script would use. Here it is 2, which means changes. |
 | grep -E 'will be\|pods' | Keeps only the lines that name the object being changed and the pod values. | Cuts a long plan down to the lines that tell you what Terraform wants to change back. |
-| select(.change.actions != ["no-op"]) | Keeps only the objects that have an action other than doing nothing. | Leaves the one object that differs, with its action. |
-
-![Output from a real lab run: Ask Terraform what it sees](img/IAC-1-shot-3b.png)
 
 #### 3c. Repair the change and check again
 
@@ -798,7 +775,7 @@ configmap/settings-record
 **Learning point: Asking both tools the same question side by side shows that each tool only sees the objects its own files describe.**
 
 - Each tool reports that nothing needs doing in its own way: Terraform with exit code 0, Ansible with changed=0.
-- Read the supplied summary script, run it when everything matches, change one thing by hand, and run it again to see which tool notices.
+- Run the supplied summary script when everything matches, change one thing by hand, and run it again to see which tool notices.
 
 What this step adds (thick lines and outlines are new):
 
@@ -806,57 +783,11 @@ What this step adds (thick lines and outlines are new):
 
 - A summary script asks each tool the same question, whether the cluster matches the files.
 
-#### 5a. Read the summary script
-
-You will now read summary.sh, the file you saved in your folder.
-
-- You read this file and do not type it.
-
-Look for these as you read:
-
-- The script only asks questions: a Terraform plan and an Ansible check run. Nothing in it applies or changes anything.
-- Terraform answers with an exit code, and the script turns that number into a sentence.
-- Ansible answers with the changed count in its recap line, and the script pulls that number out with grep and sed.
-
-```bash
-#!/usr/bin/env bash
-# One line per tool: does the cluster match the files? Reads only and changes nothing.
-cd /workspace/iac-1/baseline || exit 1
-terraform plan -input=false -detailed-exitcode > /dev/null 2>&1
-tf=$?
-tfmsg="terraform: the cluster matches the files (exit code 0)"
-if test "$tf" -eq 2; then
-  tfmsg="terraform: the cluster differs from the files (exit code 2)"
-fi
-if test "$tf" -eq 1; then
-  tfmsg="terraform: could not check (exit code 1)"
-fi
-echo "$tfmsg"
-cd /workspace/iac-1 || exit 1
-changed=$(ansible-playbook -i localhost, baseline.yml --check | grep -E "^localhost" | sed -E "s/.*changed=([0-9]+).*/\1/")
-echo "ansible: ${changed:-unknown} change(s) the playbook would make"
-
-```
-
-**Expected output:**
-
-```
-Nothing prints. This block is for reading.
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| terraform plan -detailed-exitcode > /dev/null 2>&1 | Runs a plan, throws its text away, and keeps only the exit code. | The exit code is the answer. The text is not needed here. |
-| tf=$? | Saves the exit code in a variable. | The next lines test it, and the variable keeps the number. |
-| if test "$tf" -eq 2 | Runs the lines inside only when the exit code is 2, which means changes. | Turns a number into a sentence a person can read. |
-| ansible-playbook ... --check \| grep -E "^localhost" \| sed ... | Runs the playbook in check mode, keeps the recap line, and cuts out the changed number. | Check mode makes sure the script cannot change the cluster. |
-| ${changed:-unknown} | Uses the number, or the word unknown if it could not be read. | A script that cannot find the answer should say so instead of printing nothing. |
-
-![Output from a real lab run: Read the summary script](img/IAC-1-shot-5a.png)
-
-#### 5b. Run the summary, change something by hand, run it again
+#### 5a. Run the summary, change something by hand, run it again
 
 You will now run the summary, change the settings record by hand, and run the summary again.
+
+- The summary script is a file you saved in Step 1, and the table explains its main lines.
 
 ```bash
 cd /workspace/iac-1
@@ -880,12 +811,17 @@ ansible: 1 change(s) the playbook would make
 
 | Part | What it does | Why you run it |
 | --- | --- | --- |
-| bash summary.sh | Runs the supplied script. It prints one line per tool. | The two lines are the answer, side by side. |
+| bash summary.sh | Runs the supplied script you saved in Step 1. It prints one line per tool. The next five rows are lines inside it. | The two lines are the answer, side by side. The script only asks questions and changes nothing. |
+| terraform plan -detailed-exitcode > /dev/null 2>&1 | Runs a plan, throws its text away, and keeps only the exit code. | The exit code is the answer. The text is not needed here. |
+| tf=$? | Saves the exit code in a variable. | The next lines test it, and the variable keeps the number. |
+| if test "$tf" -eq 2 | Runs the lines inside only when the exit code is 2, which means changes. | Turns a number into a sentence a person can read. |
+| ansible-playbook ... --check \| grep -E "^localhost" \| sed ... | Runs the playbook in check mode, keeps the recap line, and cuts out the changed number. | Check mode makes sure the script cannot change the cluster. |
+| ${changed:-unknown} | Uses the number, or the word unknown if it could not be read. | A script that cannot find the answer should say so instead of printing nothing. |
 | oc patch configmap settings-record ... | Changes the value in the settings record by hand. | The settings record is in the playbook but not in the Terraform files. |
 | second bash summary.sh | Runs the same script again. | Terraform still says it matches, because it does not know about the record. Ansible says one change. |
 | --check --diff \| grep ... | Shows what Ansible would change back, keeping the lines with baseline in them: the before and after values. | For an object that already exists you get a diff, so you can see what was changed. |
 
-#### 5c. Repair the record and run the summary once more
+#### 5b. Repair the record and run the summary once more
 
 You will now run the playbook for real to put the record back, and then run the summary.
 

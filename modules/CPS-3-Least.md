@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 13 of 29 in the recommended order |
-| Timed work | About 68 minutes (52 hands-on, 16 verify) |
+| Sequence | Module 14 of 32 in the recommended order |
+| Timed work | About 66 minutes (50 hands-on, 16 verify) |
 | Standalone start | `lab start cps-3` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | OpenShift Container Platform, Kubernetes RBAC and NetworkPolicy (included with OpenShift), oc, jq, python3, AWS CLI (iam simulate-custom-policy, no changes made) |
@@ -621,7 +621,7 @@ You will now write the file report-policy.json yourself.
 - Type the block (do not paste it) and write your own value in place of each WRITE value.
 - Example for a different job: a program that may only upload into the folder incoming of the bucket example-uploads has "Action": ["s3:PutObject"] and "Resource": "arn:aws:s3:::example-uploads/incoming/*".
 - To fix a mistake, type the block again with the corrected value, which replaces the file.
-- Give yourself about 10 minutes, and do not open the file in the reference folder yet.
+- Give yourself about 10 minutes.
 
 ```bash
 mkdir -p /workspace/cps-3 && cd /workspace/cps-3
@@ -711,34 +711,9 @@ policy check: PASS
 
 ![Output from a real lab run: Check your policy by simulation](img/CPS-3-shot-5b.png)
 
-#### 5c. Compare with the reference answer
-
-You will now compare your policy with the reference answer that lab start placed in the reference folder.
-
-- Compare with the reference only after your policy printed PASS, or after you tried for the full 10 minutes.
-
-```bash
-cd /workspace/cps-3
-diff <(jq -S . report-policy.json) <(jq -S . reference/report-policy.reference.json) && echo "same as the reference" || echo "differs from the reference"
-```
-
-**Expected output:**
-
-```
-Example only. A correct policy can differ, for example in the Sid name; the simulation check decides whether yours is right.
-same as the reference
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| cd ... | Moves into the module folder from Step 1, where report-policy.json and the reference folder are. | Every block starts in the folder that holds its files, so it works on its own. |
-| jq -S . | Prints each file as JSON with the keys sorted, so spacing and key order do not matter. | Compares the meaning of the two policies, not how they were typed. |
-| diff <(...) <(...) | Shows any line that differs between the two printed policies. It prints nothing when they match. | Shows exactly which part of your policy is different. |
-| differs from the reference | Printed when any line differs. Read the diff lines above it. | The reference is only a model to learn from; the simulation check is the test. |
-
 > **NOTE:** An error that says Unable to locate credentials means the lab shell has no AWS keys loaded; load them as in earlier modules and run the block again. An AccessDenied error that names iam:SimulateCustomPolicy means your cloud identity lacks that one permission. Copy the command and the error and ask your AI assistant.
 
-> **YOUR TURN:** Type the first block and write the two missing values, run the second block until it prints PASS, then run the third block.
+> **YOUR TURN:** Type the first block and write the two missing values, then run the second block until it prints PASS.
 
 > **CHECKPOINT:** The policy check prints PASS: the read of the report file is allowed, and the write, the delete and the read outside the reports folder are all implicitDeny.
 
@@ -944,7 +919,6 @@ Each term is also explained the first time it appears. In Word, hover over an un
 | Credential | A secret that proves who you are, such as a password, token or key. |
 | Default-deny | A network policy that selects every pod and lists no allowed traffic, so everything is blocked until another rule allows it. |
 | Deployment | A cluster object that keeps a set number of copies of a program running and replaces them when you change it. |
-| diff | A command that shows the differences between two files. |
 | Dry run | A check that reads and validates a file without making any change. |
 | Egress | Network traffic leaving a pod. |
 | Evidence | Saved records that show a system is set up and behaving as claimed. |

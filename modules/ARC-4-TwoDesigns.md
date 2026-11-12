@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 22 of 29 in the recommended order |
-| Timed work | About 52 minutes (40 hands-on, 12 verify) |
+| Sequence | Module 25 of 32 in the recommended order |
+| Timed work | About 51 minutes (39 hands-on, 12 verify) |
 | Standalone start | `lab start arc-4` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | OpenShift Container Platform, Kubernetes NetworkPolicy, Red Hat OpenShift Service Mesh 3 (Istio based), oc, jq, python3 |
@@ -223,7 +223,6 @@ You will now put the network policies in both projects, check and apply the mesh
 ```bash
 sed "s/NS_NAME/arc-a/" "$HOME/arc/netpol.yaml" | oc apply -f -
 sed "s/NS_NAME/arc-b/" "$HOME/arc/netpol.yaml" | oc apply -f -
-oc explain authorizationpolicy.spec.rules.from.source
 oc apply -f "$HOME/arc/mesh.yaml" --dry-run=server
 oc apply -f "$HOME/arc/mesh.yaml"
 oc get pods -n arc-a
@@ -235,7 +234,6 @@ oc get pods -n arc-b
 ```
 Example only. Names and ages will differ.
 networkpolicy.networking.k8s.io/default-deny-ingress created (and api-from-web, db-from-api), once for each project. A re-run prints unchanged instead of created.
-The fields of the AuthorizationPolicy source, printed by oc explain.
 The dry run lists peerauthentication and authorizationpolicy as created (server dry run), then the real apply lists them as created.
 arc-a pods: web, api, db and the attack pods, each showing 1/1.
 arc-b pods: web, api and db showing 2/2; the attack pod atk-copied-mesh shows 2/2 and the other two show 1/1.
@@ -244,11 +242,10 @@ arc-b pods: web, api and db showing 2/2; the attack pod atk-copied-mesh shows 2/
 | Part | What it does | Why you run it |
 | --- | --- | --- |
 | sed "s/NS_NAME/arc-a/" ... \| oc apply -f - | Swaps the placeholder for the project name and applies the result. | Puts the same network policies in both projects. |
-| oc explain ... | Prints the fields the installed mesh accepts, so you can compare them with the file. | Confirms the field names before you apply the file, so a typo shows up as an explanation and not as a silent gap. |
 | --dry-run=server | Asks the cluster to check the file without saving it. | Catches mistakes in mesh.yaml before it can change anything. |
 | oc get pods | In arc-a each pod shows 1/1 containers. In arc-b the web, api and database pods show 2/2: the program plus the sidecar. | The 2/2 against 1/1 is how you see which pods have a sidecar, and that decides which design protects them. |
 
-![Step 1, block 1b: the network policies and the mesh policies applied, and the pods of arc-a (1/1) and arc-b (2/2). The oc explain field list is left out.](img/ARC-4-shot-1b-excerpt.png)
+![Step 1, block 1b: the network policies and the mesh policies applied, and the pods of arc-a (1/1) and arc-b (2/2).](img/ARC-4-shot-1b-excerpt.png)
 
 > **NOTE:** In arc-b the attack pod named atk-copied-mesh shows 2/2 because it has a sidecar. The other two attack pods opt out of the sidecar and show 1/1. The cases test that difference. On this cluster the sidecar container, istio-proxy, is a native sidecar, so oc lists it under initContainers and not under containers in the pod's YAML. The READY count still includes it. The folder $HOME/arc is shared by the architecture modules, so starting another ARC module in the same lab can overwrite netpol.yaml. Finish this module before you start another one.
 
@@ -487,16 +484,13 @@ The network policies created again in each project.
 
 #### 4b. Stop the mesh control plane, recreate the database pods, then start it again
 
-You will now stop the mesh control plane and run the cases against arc-b.
+You will now stop the mesh control plane, recreate the database pod in each project, look at what happens, and start the control plane again.
 
-- You then recreate the database pod in each project, look at what happens, and start the control plane again.
 - The block takes about 8 minutes, mostly waiting, so start it and let it run.
 
 ```bash
 oc get deployment -n istio-system
 oc scale deployment/istiod -n istio-system --replicas=0
-sleep 15
-python3 "$HOME/arc/harness.py" "$HOME/arc/cases.json" arc-b | jq -c '.["arc-b"].codes'
 oc delete pod -n arc-a -l tier=db
 oc delete pod -n arc-b -l tier=db
 sleep 60
@@ -515,7 +509,6 @@ oc rollout status deployment/db -n arc-b
 Example only. Names and ages will differ.
 The deployment istiod in istio-system.
 deployment scaled (to 0).
-One line of JSON with the codes for arc-b.
 The database pod in arc-a ready again. In arc-b the pod may be missing.
 FailedCreate events in arc-b that name the sidecar injection step, if the pod is missing.
 deployment scaled (to 1), then rollout messages until istiod and the db deployment in arc-b are successfully rolled out.
@@ -526,13 +519,10 @@ deployment scaled (to 1), then rollout messages until istiod and the db deployme
 | oc get deployment -n istio-system | Shows the name of the mesh control plane deployment. The scale commands below assume it is `istiod`. | Confirms the real name before you scale it, because the next command assumes it. |
 | --replicas=0 | Stops the mesh control plane. Existing sidecars keep the certificates they already hold. | Simulates the failure of the part that issues certificates and adds sidecars. |
 | oc rollout restart deployment/db -n arc-b | Starts the arc-b database again. After the failed creates the Deployment can sit in a retry delay, and the restart makes it create the pod now that the control plane is back. | Without it the arc-b pod can stay missing for several minutes after the control plane returns. |
-| harness ... arc-b | Runs the cases again against arc-b with the control plane down, so you can see whether existing traffic is affected. | Shows whether traffic that already flows depends on the control plane being up. |
 | oc delete pod -l tier=db | Replaces the database pod in each project. The new pod in arc-b needs the sidecar added by the mesh control plane at creation time. | Forces a new database pod to be created, which is when the control plane is needed. |
 | oc get pods ... tier=db | Shows whether each new pod exists and is ready. In arc-b the pod may be missing altogether. | Shows the state each design ends in: a new pod in arc-a and possibly none in arc-b. |
 | oc get events ... FailedCreate | Shows why the pod is missing: the error from the sidecar injection check (the step where the mesh adds a sidecar to a new pod), which the stopped control plane cannot answer. | Gives the reason in the cluster's own words, so you do not have to guess why the pod is missing. |
 | --replicas=1 and rollout status | Starts the control plane again and waits until it and the database in arc-b are ready. | Undoes the failure and waits until the database in arc-b is back, so the lab is left whole. |
-
-![Output from a real lab run: Stop the mesh control plane, recreate the database pods, then start it again](img/ARC-4-shot-4b.png)
 
 > **SECURITY:** Stopping the mesh control plane affects every project that uses the mesh. In your own lab that is only arc-b. Start it again at the end of the block, as the last lines do.
 

@@ -12,3 +12,10 @@ lab.env
 *.key
 Thumbs.db
 ~$*
+
+# Local-only work files (never publish)
+live-run/captures/
+live-run/png/
+lab-workspace-backups-*/
+lab/build/
+lab/*.egg-info/

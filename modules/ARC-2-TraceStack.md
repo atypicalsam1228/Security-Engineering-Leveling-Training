@@ -2,7 +2,7 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 8 of 29 in the recommended order |
+| Sequence | Module 9 of 32 in the recommended order |
 | Timed work | About 56 minutes (34 hands-on, 22 verify) |
 | Standalone start | `lab start arc-2` |
 | Combined start | Continue from the end state of the previous module |

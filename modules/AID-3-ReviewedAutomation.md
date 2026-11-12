@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 14 of 29 in the recommended order |
-| Timed work | About 72 minutes (50 hands-on, 22 verify) |
+| Sequence | Module 15 of 32 in the recommended order |
+| Timed work | About 70 minutes (48 hands-on, 22 verify) |
 | Standalone start | `lab start aid-3` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | Python (python3), git, Gitea (in-lab git server), OpenShift Pipelines (Tekton), Loki (free, open source), Stub model service (provided by the lab), oc, tkn, curl, jq |
@@ -187,18 +187,20 @@ The table lists each drafted query, what is wrong with it and what catches it.
 - Enter lab shell with `lab shell`. Every other command in this module runs inside lab shell.
 - If a step fails: run `lab reset aid-3` on your own computer and repeat the step once. If it still fails, copy the whole command and error and ask your AI assistant. Do not skip the step.
 
-### Step 1. Reach the model and clone the repository
+### Step 1. Set up, then review a drafted shape check and write the test that catches its flaw (SI-10 Information Input Validation)
 
-**Learning point: Opening a tunnel to the stub model service, fetching its three scan findings and cloning the repository gives you a working copy and the data the summary script will summarize.**
+**Learning point: Cloning the repository and fetching the stub's scan findings gives you a working copy and data to summarize. Then writing a test for a bad input, watching it fail against the assistant-drafted shape check and fixing the flaw it finds proves the check refuses what it should.**
 
-- The stub is only reachable through a port forward.
-- The main branch accepts changes only through a reviewed pull request, so the work starts on a branch.
+- The stub is only reachable through a port forward, and the main branch accepts changes only through a reviewed pull request, so the work starts on a branch.
+- An AI assistant wrote the shape check from a written specification.
+- You paste the shape check as it came, paste four tests, write the fifth test yourself, and read what the test tells you.
+- The review gate in Step 3 requires the tests.
 
 What this step adds (thick lines and outlines are new):
 
 ![A model answer is checked before it is used, after step 1](img/AID-3-step-1.png)
 
-- The lab starts with the stub model service in project ai-lab, Loki in project siem, and a repository on Gitea (project gitea) whose main branch needs a passing check. You clone that repository into your working copy and fetch the scan findings from the stub.
+- The lab starts with the stub model service in project ai-lab, Loki in project siem, and a repository on Gitea (project gitea) whose main branch needs a passing check. You clone that repository into your working copy and fetch the scan findings from the stub. A shape check is added in your working copy. It accepts one exact reply shape and refuses everything else.
 
 #### 1a. Make a folder, clone the repository and fetch the scan findings
 
@@ -239,32 +241,12 @@ add-summarizer
 | git checkout -B add-summarizer | Starts the branch for this work, or switches to it if it already exists. | Main accepts changes only through a reviewed pull request, so you do the work on a branch. |
 | -d '{"request_id": "findings-1"}' | Asks the stub for its stored scan findings. The id picks the fixed answer. | The summary script needs something to summarize, and the stub holds a fixed list of scan findings for it. |
 | jq -r .reply \| jq . > findings.json | Takes the reply text out of the answer, formats it, and saves it as a file. | The findings arrive wrapped in the stub's answer, and you need them as a plain file the script can read. |
-| jq length findings.json | Counts the findings. You will compare this number with what the model reports. | Step 3 compares the model's count with this number. |
+| jq length findings.json | Counts the findings. You will compare this number with what the model reports. | Step 2 compares the model's count with this number. |
 | git branch --show-current | Prints the name of the branch you are on. | It confirms the work happens on the branch and not on main. |
 
 ![Output from a real lab run: Make a folder, clone the repository and fetch the scan findings](img/AID-3-shot-1a.png)
 
-> **YOUR TURN:** Run the block.
-
-> **CHECKPOINT:** The count is 3, and the last line says add-summarizer.
-
-> **TAKEAWAY:** Work on a branch from the start, because the main branch merges only through a reviewed pull request.
-
-### Step 2. Review a drafted shape check and write the test that catches its flaw (SI-10 Information Input Validation)
-
-**Learning point: Writing a test for a bad input, watching it fail against the assistant-drafted shape check and fixing the flaw it finds proves the check refuses what it should.**
-
-- An AI assistant wrote the shape check from a written specification.
-- You paste the shape check as it came, paste four tests, write the fifth test yourself, and read what the test tells you.
-- The review gate in Step 4 requires the tests.
-
-What this step adds (thick lines and outlines are new):
-
-![A model answer is checked before it is used, after step 2](img/AID-3-step-2.png)
-
-- A shape check is added in your working copy. It accepts one exact reply shape and refuses everything else.
-
-#### 2a. Save the drafted shape check as shape.py
+#### 1b. Save the drafted shape check as shape.py
 
 You will now make the file shape.py in the ai-tools folder by pasting the whole block (a heredoc) into the lab shell.
 
@@ -310,7 +292,7 @@ ok
 
 | Part | What it does | Why you run it |
 | --- | --- | --- |
-| cd /workspace/aid-3/ai-tools | Moves into the repository folder from Step 1. | The file is made in the folder you are standing in. |
+| cd /workspace/aid-3/ai-tools | Moves into the repository folder cloned in the first block of this step. | The file is made in the folder you are standing in. |
 | cat > shape.py <<'EOF' ... EOF | Writes everything between the first and the last line into shape.py. The quotes around EOF stop the shell from changing any character. Running it again replaces the file with the same text. | This is how you make a file with only a paste, since the lab has no editor. |
 | test -s shape.py && echo ok \|\| echo EMPTY | Prints ok if the file has content and EMPTY if it has none. | Pasting the block twice can leave the file empty. If EMPTY shows, paste the block again. |
 | FIELDS = {...} | The only fields allowed and the type of each. | Spelling out the allowed fields in advance is what lets the check refuse everything else. |
@@ -321,7 +303,7 @@ ok
 | not in SEVERITIES | Refuses any severity word that is not on the list. | Only words on the list may pass, so a made-up severity cannot reach later steps. |
 | `return dict(data)` | Returns a copy, so the caller cannot change the checked object by accident. | Handing back a copy means the checked reply cannot be altered by accident after it has passed. |
 
-#### 2b. Save four tests as tests/test_shape.py
+#### 1c. Save four tests as tests/test_shape.py
 
 You will now make the folder tests and the file test_shape.py inside it by pasting the whole block into the lab shell.
 
@@ -378,9 +360,9 @@ ok
 | GOOD, variant() | One good reply, and a helper that makes a copy of it with one thing changed. | Each test starts from one good reply and changes one thing, so a failure points at that one thing. |
 | test_accepts_a_good_reply | The check must not refuse a correct reply. A check that refuses everything is useless. | Without this test, a check that refuses everything would pass all the others. |
 | assertRaises(ValueError) | The test passes only if the check refuses the reply. | The test passes only when the check refuses, which is the behavior you are proving. |
-| test_rejects_... | One test for each of three shape problems the stub sends: prose, an extra field and a bad value. The long summary is checked end to end in Test 2, and the wrong count is caught in Step 3 by the cross-check, not by the shape check. | Together with your test, these show the check refuses the main kinds of bad reply, and the review gate later requires at least four that expect a refusal. |
+| test_rejects_... | One test for each of three shape problems the stub sends: prose, an extra field and a bad value. The long summary is checked end to end in Test 2, and the wrong count is caught in Step 2 by the cross-check, not by the shape check. | Together with your test, these show the check refuses the main kinds of bad reply, and the review gate later requires at least four that expect a refusal. |
 
-#### 2c. Start the test you will write
+#### 1d. Start the test you will write
 
 You will now make tests/test_boolean.py with the setup of your test: a reply whose count is true instead of a number.
 
@@ -416,7 +398,7 @@ ok
 | test -s tests/test_boolean.py && echo ok \|\| echo EMPTY | Prints ok if the file has content and EMPTY if it has none. | Pasting the block twice can leave the file empty. If EMPTY shows, paste the block again. |
 | "count": True | Builds a reply that is otherwise good, but whose count is the JSON value true. | A model can send true where a number belongs. The check is supposed to refuse it. |
 
-#### 2d. Write your test and run all five
+#### 1e. Write your test and run all five
 
 You will now write two lines.
 
@@ -464,9 +446,9 @@ FAILED (failures=1)
 | grep -c assertRaises tests/test_boolean.py | Counts the lines that contain assertRaises. 1 means your with-line is in the file; 0 means the test would pass without checking anything. | A test with no check passes whatever the code does, so you confirm yours has one. |
 | `python3 -m unittest discover -s tests` | Runs all five tests. The failure means the test did its job: the drafted check let a count of true through. | A test that cannot fail proves nothing. Seeing it fail first shows it can catch this flaw. |
 
-![Output from a real lab run: Write your test and run all five](img/AID-3-shot-2d.png)
+![Output from a real lab run: Write your test and run all five](img/AID-3-shot-1e.png)
 
-#### 2e. Fix the flaw and run all five again
+#### 1f. Fix the flaw and run all five again
 
 You will now fix the flaw the test found, then run all five tests again.
 
@@ -504,7 +486,7 @@ OK
 | grep -n 'kind' shape.py | Prints the lines that mention kind, so you can see the new line in place. | You confirm the change before running the tests. |
 | `python3 -m unittest discover -s tests` | Runs all five tests again. All must pass. | The test that failed now passes, and the other four still pass, so the fix broke nothing. |
 
-#### 2f. Compare with the reference answer (only after you have tried)
+#### 1g. Compare with the reference answer (only after you have tried)
 
 You will now print the reference text stored on the cluster: the two lines of the test, and the flaw with its fix.
 
@@ -519,7 +501,7 @@ oc get configmap aid3-reference -n build -o jsonpath='{.data.test_boolean_count\
 
 ```
 Example only. The text is fixed.
-Reference answer for AID-3 Step 2. Open it only after you have tried.
+Reference answer for the AID-3 shape test. Open it only after you have tried.
 (the two lines of the test)
 (the flaw in the drafted check, and the fixed line)
 ```
@@ -530,9 +512,9 @@ Reference answer for AID-3 Step 2. Open it only after you have tried.
 
 > **TIP:** Both files you paste can be pasted again safely. To redo your test, paste the block that starts test_boolean.py again before you add your lines.
 
-> **YOUR TURN:** Paste shape.py and the four tests, write the fifth test, watch it fail, fix shape.py, and open the reference answer last.
+> **YOUR TURN:** Run the setup block, paste shape.py and the four tests, write the fifth test, watch it fail, fix shape.py, and open the reference answer last.
 
-> **CHECKPOINT:** Before the fix, four tests pass and yours fails with ValueError not raised. After the fix, five tests run and the last line is OK.
+> **CHECKPOINT:** The findings count is 3 and the branch is add-summarizer. Before the fix, four tests pass and yours fails with ValueError not raised. After the fix, five tests run and the last line is OK.
 
 > **TAKEAWAY:** A draft that reads well can still be wrong, so write the test before you trust the draft.
 
@@ -540,7 +522,7 @@ Reference answer for AID-3 Step 2. Open it only after you have tried.
 
 - **SI-10:** You test the assistant-drafted shape check with a bad reply, find a flaw and fix it.
 
-### Step 3. Write the summary script and log every exchange (SI-10 Information Input Validation, AU-12 Audit Record Generation)
+### Step 2. Write the summary script and log every exchange (SI-10 Information Input Validation, AU-12 Audit Record Generation)
 
 **Learning point: Running the summary script end to end shows the SI-10 and AU-12 loop at work: the prompt and reply go to Loki, and the reply passes the shape check and the count cross-check.**
 
@@ -550,24 +532,24 @@ Reference answer for AID-3 Step 2. Open it only after you have tried.
 
 What this step adds (thick lines and outlines are new):
 
-![A model answer is checked before it is used, after step 3](img/AID-3-step-3.png)
+![A model answer is checked before it is used, after step 2](img/AID-3-step-2.png)
 
 - The summary script in your working copy sends the findings to the stub model service, applies the shape check to the reply, and sends a log record of every prompt, reply and rejection to Loki in project siem.
 
-#### 3a. Read ailog.py
+#### 2a. Read ailog.py
 
 You will now read the file `ailog.py`, which came with the repository you cloned.
 
 - You do not type `ailog.py`, and reading it prints nothing.
 - To see the same file in lab shell, type cd /workspace/aid-3/ai-tools and then cat `ailog.py`.
-- Step 5 uses the query function in ailog.py.
+- Step 4 uses the query function in ailog.py.
 
 Look for these as you read:
 
 - loki_access() builds the sign-in header and the certificate check once, so push() and query() cannot send a request without them.
 - post() sends one JSON request and gives up after 10 seconds, so a stuck server cannot hang the script.
 - push() sends one record with the labels you give it. log_event() calls it with the labels app and kind, and those two are what you search by in Loki.
-- query() asks Loki one question at one moment (an instant query) and returns the answer as data. Step 5 uses it.
+- query() asks Loki one question at one moment (an instant query) and returns the answer as data. Step 4 uses it.
 - The login and the certificate file come from lab variables (os.environ), so no password is written in the file. A missing lab variable stops the script with an error, and no unauthenticated request is sent.
 
 ```python
@@ -619,11 +601,11 @@ def query(expr):
 | post(...) | Sends one JSON request and returns the text of the answer. It gives up after 10 seconds instead of waiting forever. | One small function sends every request the same way, with a time limit so a stuck server cannot hang the script. |
 | push(labels, line) | Sends one record to Loki with the labels you pass in and its own timestamp in nanoseconds, which is what Loki expects. | Loki orders records by their time, so each record needs its own, and the labels are how you find the record again. |
 | log_event(kind, request_id, text) | Writes one record: what kind of event, which request, and the text. Only app and kind are labels, so a search by app and kind is fast. | Every exchange goes through one function, so no event can be logged in a different way or forgotten. |
-| query(expr) | Sends one LogQL query to Loki as an instant query and returns the answer as data. | The checker in Step 5 needs to ask Loki a question from code, and reusing this file keeps the sign-in and certificate handling in one place. |
+| query(expr) | Sends one LogQL query to Loki as an instant query and returns the answer as data. | The checker in Step 4 needs to ask Loki a question from code, and reusing this file keeps the sign-in and certificate handling in one place. |
 
-![Output from a real lab run: Read ailog.py](img/AID-3-shot-3a.png)
+![Output from a real lab run: Read ailog.py](img/AID-3-shot-2a.png)
 
-#### 3b. Save the summary script as summarize.py
+#### 2b. Save the summary script as summarize.py
 
 You will now make the file summarize.py in the ai-tools folder, next to shape.py and `ailog.py`, by pasting the whole block into the lab shell.
 
@@ -696,7 +678,7 @@ ok
 | reply["count"] != len(findings) | Cross-checks the reply against data the script already holds. The shape can be right while the content is wrong. | A reply can have the right shape and still be wrong, so the count is checked against data the script holds. |
 | return 1 ... return 0 | The exit status is the number a command leaves behind when it ends. 0 means a good summary and 1 means refused, so a pipeline or a schedule can tell. | The exit status lets a person, a schedule or the review gate tell a good run from a refused one without reading the output. |
 
-#### 3c. Run the script on the good reply
+#### 2c. Run the script on the good reply
 
 You will now run the summary script on the stub's good summary.
 
@@ -737,7 +719,7 @@ Example only. The summary text and the severity come from the stub.
 - **SI-10:** Every reply goes through the shape check and a count cross-check, and a refused reply ends the run with status 1.
 - **AU-12:** The script logs the prompt, the reply and any rejection to Loki before acting, tied together by a request id.
 
-### Step 4. Push the branch, run the review gate and merge (CM-3 Configuration Change Control)
+### Step 3. Push the branch, run the review gate and merge (CM-3 Configuration Change Control)
 
 **Learning point: Running the review gate from outside your repository, recording its result as a commit status and merging only on success puts the CM-3 decision on record and makes the merge depend on it.**
 
@@ -746,11 +728,11 @@ Example only. The summary text and the severity come from the stub.
 
 What this step adds (thick lines and outlines are new):
 
-![A model answer is checked before it is used, after step 4](img/AID-3-step-4.png)
+![A model answer is checked before it is used, after step 3](img/AID-3-step-3.png)
 
 - You push the branch add-summarizer to the repository on Gitea. You start the review gate, a pipeline in project build, on that branch. You then record its pass or fail result in Gitea against the commit from lab shell, and the pull request merges into the main branch only because the gate passed.
 
-#### 4a. Commit, push the branch and read the start of the review gate
+#### 3a. Commit, push the branch and read the start of the review gate
 
 You will now save your five files in one commit, send the branch to Gitea, and print the first lines of the gate script held on the cluster.
 
@@ -780,9 +762,9 @@ branch 'add-summarizer' set up to track 'origin/add-summarizer'.
 | git push -u origin add-summarizer | Sends the branch to Gitea. A push straight to main would be refused. | The branch must be on Gitea for the gate to check it and for a pull request to be opened. |
 | oc get configmap ai-review-gate ... \| head -n 30 | Prints the top of the gate script, so you can read what it will check before it judges your work. | Reading the gate before it judges your work shows what is checked and where it is stored. |
 
-![Output from a real lab run: Commit, push the branch and read the start of the review gate](img/AID-3-shot-4a.png)
+![Output from a real lab run: Commit, push the branch and read the start of the review gate](img/AID-3-shot-3a.png)
 
-#### 4b. Run the review gate pipeline and record its result in Gitea
+#### 3b. Run the review gate pipeline and record its result in Gitea
 
 You will now run the gate pipeline on your branch, turn its result into success or failure, and record that result in Gitea against your commit.
 
@@ -828,7 +810,7 @@ success
 | SHA=$(git rev-parse HEAD) | The identity of the commit that was just checked. The status is attached to that exact commit. | A status belongs to one exact commit, so a result cannot be mistaken for a later change. |
 | curl ... /statuses/$SHA | Records the result in Gitea under the name ai-script-review, which is the name the protected branch requires. | Main refuses a merge until this named status is success, so this call is what lets the merge happen. |
 
-#### 4c. Open the pull request and merge it
+#### 3c. Open the pull request and merge it
 
 You will now open a pull request from add-summarizer into main and ask Gitea to merge it.
 
@@ -875,7 +857,7 @@ pull request: <n>
 
 - **CM-3:** The gate reviews your branch from outside your repository, and the merge happens only because the commit status is success.
 
-### Step 5. Check a query the model drafted against known data (SI-10 Information Input Validation, SA-11 Developer Testing and Evaluation)
+### Step 4. Check a query the model drafted against known data (SI-10 Information Input Validation, SA-11 Developer Testing and Evaluation)
 
 **Learning point: Testing each drafted query with a checker that refuses a too-wide scope and compares the rest against counts known before any query ran shows whether the query can be trusted.**
 
@@ -885,11 +867,11 @@ pull request: <n>
 
 What this step adds (thick lines and outlines are new):
 
-![A model answer is checked before it is used, after step 5](img/AID-3-step-5.png)
+![A model answer is checked before it is used, after step 4](img/AID-3-step-4.png)
 
 - The stub model service drafts three LogQL queries. A query checker in your working copy refuses a draft with the wrong scope, runs the others against eight known sign-in events in Loki, and compares the result with the answer it already knows.
 
-#### 5a. Read the seed script and push the eight known events
+#### 4a. Read the seed script and push the eight known events
 
 You will now read the supplied seed script and run it.
 
@@ -917,9 +899,9 @@ pushed 8 events to app=ai-fixture
 | python3 seed_fixture.py | Pushes each event to Loki as one record with its own timestamp, and writes the same list to fixture.json. It refuses to run twice, because a second push would double every count; the \|\| true lets the block carry on when it refuses. | The checker reads fixture.json to work out the expected counts without using Loki or the query. |
 | sleep 5 | Waits a few seconds so Loki and your shell agree that the events are in the last hour. | The checker counts events in the last hour, and a clock that is a little off could leave one out. |
 
-![Output from a real lab run: Read the seed script and push the eight known events](img/AID-3-shot-5a.png)
+![Output from a real lab run: Read the seed script and push the eight known events](img/AID-3-shot-4a.png)
 
-#### 5b. Ask the stub for three drafted queries
+#### 4b. Ask the stub for three drafted queries
 
 You will now ask the stub model service for three LogQL queries and save each as a file.
 
@@ -954,7 +936,7 @@ sum by (user) (count_over_time({app="ai-fixture"} | json | event="login_failed" 
 | jq -n --arg id ... --arg p ... | Builds the request with the request id and the prompt, quoted safely. The stub picks its fixed answer by the id and never reads the prompt. | Building the JSON with jq stops a quote in the prompt from breaking the request. |
 | jq -r .reply > draft-$id.logql | Saves the reply text as a file, one file for each draft. | The checker reads a file, so the draft is kept exactly as the model wrote it. |
 
-#### 5c. Read the scope check in scope.py
+#### 4c. Read the scope check in scope.py
 
 You will now read scope.py, which came with the repository next to `ailog.py`.
 
@@ -980,7 +962,7 @@ Example only.
 | `re.findall(r"\[(\d+)([smhd])\]", expr)` | Finds every range such as [1h] and turns it into seconds. A query with no range, or a range over the limit, is a problem. | A long range makes Loki read far more data than the task needs. |
 | rows(expr) | Runs one query through query() in `ailog.py` and returns the list of results. | Every call to Loki goes through the one function that holds the sign-in and the certificate check. |
 
-#### 5d. Save the checker as check_query.py
+#### 4d. Save the checker as check_query.py
 
 You will now make the file check_query.py, which uses scope.py, by pasting the whole block into the lab shell.
 
@@ -1050,7 +1032,7 @@ ok
 | got != expected | Any difference fails the draft, and an empty result is reported as nothing. A query that finds nothing is not a quiet system, it is a query that missed four known events. | An exact match is the only result that shows the query found everything it should and nothing else. |
 | return 1 ... return 2 ... return 0 | Exit status 0 means pass, 1 means the draft failed, and 2 means the test data was wrong. | The status lets a script or a pipeline tell the three outcomes apart without reading the text. |
 
-#### 5e. Check the good draft
+#### 4e. Check the good draft
 
 You will now check that the checker is well formed and then run it on the good draft.
 
@@ -1091,7 +1073,7 @@ exit status: 0
 
 ### Test 1 (positive). Every exchange is in Loki (AU-12 Audit Record Generation)
 
-- Search Loki for the records of the Step 3 good run by request id, over the last 3 hours.
+- Search Loki for the records of the Step 2 good run by request id, over the last 3 hours.
 - If the prompt and the reply are both there, someone can later answer what was asked and what came back.
 
 ```bash
@@ -1238,7 +1220,7 @@ gate failed, as expected
 - The good draft must still pass, so you know the checker is not refusing everything.
 - The draft with a wrong event value is a valid query, and Loki accepts it and answers with nothing.
 - The wide draft is refused before it runs.
-- Run this within an hour of Step 5, while the eight events are still in the last hour.
+- Run this within an hour of Step 4, while the eight events are still in the last hour.
 
 ```bash
 cd /workspace/aid-3/ai-tools
@@ -1288,10 +1270,10 @@ FAIL: every range must be present and at most 1h
 
 | Control | What it requires, in plain words | Tool or service | Where this module covers it |
 | --- | --- | --- | --- |
-| SI-10 Information Input Validation | Check that inputs to the system are valid before they are used. | shape.py and summarize.py, run with python3. Explained in section 2.1. | Section 3, Steps 2 and 3: accept one exact reply shape from the model and refuse the rest. Section 3, Step 5: refuse a drafted query whose scope is wrong before it runs. Section 4, Test 2: five bad replies are refused. Section 4, Test 4: a too-wide query is refused. |
-| AU-12 Audit Record Generation | The system produces audit records for the events it is meant to record. | `ailog.py`, which sends each record to Loki (the log store in your lab cluster). Explained in section 2.1. | Section 3, Step 3: log each prompt (the question sent to the model), each reply and each rejection to Loki. Section 4, Test 1: find the records. Section 4, Test 2: find the rejected records. |
-| CM-3 Configuration Change Control | Review each proposed change and approve or refuse it before it is made. | The review gate pipeline ai-script-review (OpenShift Pipelines) and the protected main branch on Gitea. Explained in section 2.2. | Section 3, Step 4: run the review gate on the branch and merge it into main only on a pass. Section 4, Test 3: a bad branch fails the gate. |
-| SA-11 Developer Testing and Evaluation | Whoever writes the code tests it and keeps the results, and the flaws found are corrected. | check_query.py (python3), seed_fixture.py and Loki. Explained in section 2.3. | Section 3, Step 5: test a query the model drafted against eight known sign-in events and compare the result with the answer known in advance. Section 4, Test 4: a query that finds nothing fails the test. |
+| SI-10 Information Input Validation | Check that inputs to the system are valid before they are used. | shape.py and summarize.py, run with python3. Explained in section 2.1. | Section 3, Steps 1 and 2: accept one exact reply shape from the model and refuse the rest. Section 3, Step 4: refuse a drafted query whose scope is wrong before it runs. Section 4, Test 2: five bad replies are refused. Section 4, Test 4: a too-wide query is refused. |
+| AU-12 Audit Record Generation | The system produces audit records for the events it is meant to record. | `ailog.py`, which sends each record to Loki (the log store in your lab cluster). Explained in section 2.1. | Section 3, Step 2: log each prompt (the question sent to the model), each reply and each rejection to Loki. Section 4, Test 1: find the records. Section 4, Test 2: find the rejected records. |
+| CM-3 Configuration Change Control | Review each proposed change and approve or refuse it before it is made. | The review gate pipeline ai-script-review (OpenShift Pipelines) and the protected main branch on Gitea. Explained in section 2.2. | Section 3, Step 3: run the review gate on the branch and merge it into main only on a pass. Section 4, Test 3: a bad branch fails the gate. |
+| SA-11 Developer Testing and Evaluation | Whoever writes the code tests it and keeps the results, and the flaws found are corrected. | check_query.py (python3), seed_fixture.py and Loki. Explained in section 2.3. | Section 3, Step 4: test a query the model drafted against eight known sign-in events and compare the result with the answer known in advance. Section 4, Test 4: a query that finds nothing fails the test. |
 
 ### What each control is for
 
@@ -1305,7 +1287,7 @@ Each table below says what the control is trying to prevent and how this module'
 | The operational question | What exact shape is allowed, and what happens to an answer that is anything else? |
 | What evidence proves it | The written shape, the tests that feed it bad answers, and a record of the rejections. |
 | How much is enough | The accepted shape is narrow and written as code: the fields, their types, the allowed values and a size limit. Everything else is refused, not repaired. NIST leaves the list of inputs to check to the organization. The lab checks the model reply and the count it reports. |
-| How the tool in this module satisfies it | shape.py (Step 2) accepts only a JSON object (a plain-text data format of names and values) with three named fields, and summarize.py (Step 3) also compares the count in the reply with the number of findings it sent. |
+| How the tool in this module satisfies it | shape.py (Step 1) accepts only a JSON object (a plain-text data format of names and values) with three named fields, and summarize.py (Step 2) also compares the count in the reply with the number of findings it sent. |
 
 #### AU-12 Audit Record Generation
 
@@ -1315,7 +1297,7 @@ Each table below says what the control is trying to prevent and how this module'
 | The operational question | For any answer the script used or refused, can you show the prompt, the reply and the decision? |
 | What evidence proves it | Log entries for each prompt, each reply and each rejection, in the same store as the other logs. |
 | How much is enough | Each exchange is logged before the script acts on it, in the central log store, with a request id (a short name sent with each question) that ties the three records together. Logs that hold prompts can hold sensitive text, so what is sent to a model is chosen with that in mind. |
-| How the tool in this module satisfies it | `ailog.py` (Step 3) sends one record per event to Loki with the labels (name and value tags) app and kind. |
+| How the tool in this module satisfies it | `ailog.py` (Step 2) sends one record per event to Loki with the labels (name and value tags) app and kind. |
 
 #### CM-3 Configuration Change Control
 
@@ -1335,7 +1317,7 @@ Each table below says what the control is trying to prevent and how this module'
 | The operational question | Before this query was relied on, what known events was it tested against, and did it find all of them? |
 | What evidence proves it | The known events, the expected counts worked out without the query, and the checker output for each draft. |
 | How much is enough | Each drafted query is tested on data whose right answer is known first, and only an exact match passes. A query that returns nothing fails when the known data holds events it should have found. NIST leaves the kinds of testing, how often and the depth to the organization. The lab uses one fixture of eight events. |
-| How the tool in this module satisfies it | check_query.py (Step 5) compares the result of the query with counts computed from fixture.json, and Test 4 shows a draft that finds nothing failing. |
+| How the tool in this module satisfies it | check_query.py (Step 4) compares the result of the query with counts computed from fixture.json, and Test 4 shows a draft that finds nothing failing. |
 
 ## Section 6. Next Steps
 

@@ -74,7 +74,7 @@ MODULE = {
     "controls": ["CM-2", "CM-7", "SC-7", "SC-6"],
     "mentions": ["CM-6", "CM-3", "AC-6"],
     "unit_values_ok": [],
-    "minutes": {"hands_on": 58, "verify": 18},
+    "minutes": {"hands_on": 54, "verify": 18},
     "tools": [
         "OpenShift Container Platform (project request template)",
         "Kyverno (free, open source)",
@@ -518,22 +518,6 @@ MODULE = {
             "why": "A template runs only for project requests; a namespace made any other way misses it. Kyverno generate policies run for every namespace. The default-deny here uses synchronize on, so a deletion is undone.",
             "blocks": [
                 {
-                    "code": L(
-                        "cd /workspace/cps-5",
-                        "cat kyverno-rbac.yaml",
-                    ),
-                    "label": 'Read the extra permission for Kyverno',
-                    "intro": 'You will now read the cluster role that lab start put in your module folder as kyverno-rbac.yaml. The role lets the Kyverno service that creates objects manage network policies and quotas, and nothing else.',
-                    "expect": 'Example only. The file as supplied, 13 lines. The first lines:\napiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRole\nmetadata:\n  name: gr-kyverno-generate\n(the rest of the file)',
-                    "lines": [
-                        CDROW("where kyverno-rbac.yaml is."),
-                        ("cat kyverno-rbac.yaml", "Prints the file.", "You read what you are about to give Kyverno before you apply it."),
-                        ("rbac.kyverno.io/aggregate-to-background-controller", "A label that adds this role's rules to the Kyverno service that creates objects.", "The Kyverno service that creates objects needs these rights, and the label is how the extra role reaches it."),
-                        ("networkpolicies, resourcequotas", "Only the two kinds the policies generate. No wildcard.", "Rights only for what the policies generate, so Kyverno gets nothing it does not need."),
-                        ("verbs", "Six named verbs. Creating, reading, changing and removing, so synchronize can repair an object.", "Synchronize deletes and updates objects to repair them, so those verbs are needed as well as create."),
-                    ],
-                },
-                {
                     "code": FILE("generate-deny.yaml", L(
                         "apiVersion: kyverno.io/v1",
                         "kind: ClusterPolicy",
@@ -607,6 +591,7 @@ MODULE = {
                 {
                     "code": L(
                         "cd /workspace/cps-5",
+                        "cat kyverno-rbac.yaml",
                         "oc apply -f kyverno-rbac.yaml",
                         "sleep 10",
                         "oc auth can-i create networkpolicies --as=system:serviceaccount:kyverno:kyverno-background-controller -n gr-before",
@@ -615,10 +600,14 @@ MODULE = {
                         "oc get clusterpolicy | grep -e '^NAME' -e '^gr-'",
                     ),
                     "label": 'Apply the permission, prove it, then apply the generate policies',
-                    "intro": 'You will now apply the extra permission, ask the cluster whether Kyverno now has it, and apply the generate policies.',
-                    "expect": 'Example only. The cluster may print a deprecation warning for ClusterPolicy. That is expected.\nclusterrole.rbac.authorization.k8s.io/gr-kyverno-generate created\nyes\nclusterpolicy.kyverno.io/gr-generate-deny created (server dry run)\nclusterpolicy.kyverno.io/gr-generate-quota created (server dry run)\n(the same two lines again, without the dry run note)\n(a table with the two gr- policies; the ready column says True. Policies from other modules are filtered out by grep)',
+                    "intro": 'You will now read the cluster role lab start put in your folder as kyverno-rbac.yaml, apply it, ask the cluster whether Kyverno now has it, and apply the generate policies.',
+                    "expect": 'Example only. The cluster may print a deprecation warning for ClusterPolicy. That is expected.\n(the contents of kyverno-rbac.yaml, 13 lines)\nclusterrole.rbac.authorization.k8s.io/gr-kyverno-generate created\nyes\nclusterpolicy.kyverno.io/gr-generate-deny created (server dry run)\nclusterpolicy.kyverno.io/gr-generate-quota created (server dry run)\n(the same two lines again, without the dry run note)\n(a table with the two gr- policies; the ready column says True. Policies from other modules are filtered out by grep)',
                     "lines": [
                         CDROW("where the policy files are."),
+                        ("cat kyverno-rbac.yaml", "Prints the file.", "You read what you are about to give Kyverno before you apply it."),
+                        ("rbac.kyverno.io/aggregate-to-background-controller", "A label that adds this role's rules to the Kyverno service that creates objects.", "The Kyverno service that creates objects needs these rights, and the label is how the extra role reaches it."),
+                        ("networkpolicies, resourcequotas", "Only the two kinds the policies generate. No wildcard.", "Rights only for what the policies generate, so Kyverno gets nothing it does not need."),
+                        ("verbs", "Six named verbs. Creating, reading, changing and removing, so synchronize can repair an object.", "Synchronize deletes and updates objects to repair them, so those verbs are needed as well as create."),
                         ("oc apply -f kyverno-rbac.yaml, sleep 10", "Saves the extra permission first and gives the cluster a few seconds to add it to the Kyverno service.", "The permission must exist before the policies, because Kyverno checks it when it accepts them."),
                         ("oc auth can-i create networkpolicies --as=...", "Proves the Kyverno service now has the permission. It must answer yes before you go on.", "Proves the permission reached Kyverno. Applying policies without it would fail later without a clear sign."),
                         ("--dry-run=server", "Asks the cluster to check the policy file without saving it.", "Catches a mistake in the policy file before it is saved."),
@@ -627,7 +616,7 @@ MODULE = {
                 },
             ],
             "note": "If can-i answers no, the label did not reach Kyverno on this version: do not widen the role, read the Kyverno cluster roles with oc get clusterrole | grep kyverno and use the label they carry.",
-            "action": "Read kyverno-rbac.yaml, paste the two policy files, then run the last block.",
+            "action": "Paste the two policy files, then run the last block, which also prints kyverno-rbac.yaml.",
             "checkpoint": "can-i answers yes, and gr-generate-deny and gr-generate-quota are listed.",
         },
         {
@@ -765,7 +754,7 @@ MODULE = {
                         "EOF",
                     ),
                     "label": 'Your turn: write the registry allow-list',
-                    "intro": 'You will now write the rest of the approved-registry rule: its pattern, the shape that an image name must match. The rule must admit an image whose name starts with ${REGISTRY_HOST}/ or with registry.access.redhat.com/. The rule must refuse every other registry. The rule must also refuse a name such as registry.access.redhat.com.example.org, which only starts with the approved name, and a name with no registry at all. The rule must check init containers (containers that run first, before the main ones) as well as containers. The no-latest-tag rule above is your model: same shape, different value. For init containers, use the =( ) form you met as =(hostNetwork) in the host-access policy, which checks the field only if the pod has it. In an image pattern, a star matches any run of characters and a bar means or. Type ${REGISTRY_HOST} exactly as written, because the apply block in 4f fills it in. Type this block yourself instead of pasting it, and put your own lines where the comment is. Do not open the folder reference until you have tried and run the check.',
+                    "intro": 'You will now write the rest of the approved-registry rule: its pattern, the shape that an image name must match. The rule must admit an image whose name starts with ${REGISTRY_HOST}/ or with registry.access.redhat.com/. The rule must refuse every other registry. The rule must also refuse a name such as registry.access.redhat.com.example.org, which only starts with the approved name, and a name with no registry at all. The rule must check init containers (containers that run first, before the main ones) as well as containers. The no-latest-tag rule above is your model: same shape, different value. For init containers, use the =( ) form you met as =(hostNetwork) in the host-access policy, which checks the field only if the pod has it. In an image pattern, a star matches any run of characters and a bar means or. Type ${REGISTRY_HOST} exactly as written, because the apply block in 4f fills it in. Type this block yourself instead of pasting it, and put your own lines where the comment is.',
                     "sequence": [
                         "Type the two lines that start with cd and cat, then press Enter after the cat line.",
                         "Type your lines using spaces only, with the word pattern: in the same column as pattern: in the no-latest-tag rule.",
@@ -816,24 +805,10 @@ MODULE = {
                         ("oc get clusterpolicy | grep ...", "Lists all five gr- policies (grep hides policies from other modules). Each should show ready.", "Shows that all five policies, the two generate policies and these three, are accepted."),
                     ],
                 },
-                {
-                    "code": L(
-                        "cd /workspace/cps-5",
-                        "diff validate-images.yaml reference/validate-images-answer.yaml && echo same as the reference",
-                    ),
-                    "label": 'Compare your rule with the reference answer',
-                    "intro": 'You will now compare your rule with the finished one that lab start placed in the folder reference, after your own rule has passed the check and been applied. A difference is not a fault if your check said 6 of 6: for example, the two names can be in the other order.',
-                    "expect": 'Example only. If your file is the same, only the last line prints. Otherwise diff prints the lines that differ, marked < for yours and > for the reference.\nsame as the reference',
-                    "lines": [
-                        CDROW("where validate-images.yaml and the folder reference are."),
-                        ("diff validate-images.yaml reference/validate-images-answer.yaml", "Compares the two files line by line and prints only the lines that differ. It prints nothing and succeeds when they are the same.", "Shows what you did differently, so you can judge whether it is a mistake or a different valid choice."),
-                        ("&& echo same as the reference", "Prints the words only when diff found no difference.", "A clear sign that you matched the reference."),
-                    ],
-                },
             ],
             "tip": "Run a new validate policy in Audit mode first in a real environment, so you count what it would refuse before it refuses anything. This module checks the registry name only; checking a signature needs a signed image and a key, which the lab does not provide.",
-            "action": "Paste the first three blocks (mutate-safe-defaults.yaml, validate-host-access.yaml and the first part of validate-images.yaml). Then type the registry allow-list yourself, run the check until it says 6 of 6, apply the policies, and last compare with the reference.",
-            "checkpoint": "Your check printed 6 of 6, five policies are listed and ready, and you have compared your rule with the reference.",
+            "action": "Paste the first three blocks (mutate-safe-defaults.yaml, validate-host-access.yaml and the first part of validate-images.yaml). Then type the registry allow-list yourself, run the check until it says 6 of 6, and apply the policies.",
+            "checkpoint": "Your check printed 6 of 6, five policies are listed and ready.",
         },
         {
             "title": "Measure again on both creation paths",

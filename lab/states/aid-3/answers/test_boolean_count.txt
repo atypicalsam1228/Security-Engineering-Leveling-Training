@@ -1,4 +1,4 @@
-Reference answer for AID-3 Step 2. Open it only after you have tried.
+Reference answer for the AID-3 shape test. Open it only after you have tried.
 
 1. The test. These are the two lines that go at the end of tests/test_boolean.py
    (8 spaces before "with", 12 before "parse_reply"):

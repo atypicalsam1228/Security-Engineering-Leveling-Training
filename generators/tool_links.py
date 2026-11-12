@@ -107,9 +107,9 @@ _USE = {
         "jq": "Reads workload settings and picks fields out of the scan results.",
     },
     "AID-2": {
-        "bash": "Checks each script's syntax and runs the safe one in the sandbox project.",
+        "bash": "Runs the two unsafe scripts through the print-only harness and saves what they would do.",
         "grep": "Searches each script for risky lines before you read it.",
-        OC: "Opens the port forward to the stub model service and runs the safe script against the sandbox project.",
+        OC: "Opens the port forward to the stub model service and reads the sandbox project back to show nothing was lost.",
         "curl": "Fetches the three scripts from the stub model service through the port forward.",
         "jq": "Reads the JSON the stub model service returns.",
         "Stub model service": "Holds the three scripts, one safe and two unsafe, that you review before running.",

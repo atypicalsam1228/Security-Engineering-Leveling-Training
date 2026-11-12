@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 17 of 29 in the recommended order |
-| Timed work | About 73 minutes (50 hands-on, 23 verify) |
+| Sequence | Module 19 of 32 in the recommended order |
+| Timed work | About 71 minutes (48 hands-on, 23 verify) |
 | Standalone start | `lab start grc-4` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | OpenShift Pipelines (Tekton), Trivy (free, open source), Kyverno (free, open source), Cosign (free, open source), OpenSSL, oc, tkn, jq |
@@ -380,7 +380,7 @@ Example only. Saving the file prints nothing.
 
 You will now copy the policy check task out of the config map and print it.
 
-- The lab supplies the task, and the last step of the task runs a Python file called admit.py, which you write in the next blocks.
+- The lab supplies the task, and the last step of the task runs a Python file called admit.py, which you write in the next block.
 
 ```bash
 cd /workspace/grc-4
@@ -412,13 +412,16 @@ spec:
 
 ![Output from a real lab run: Get the policy check task](img/GRC-4-shot-3b.png)
 
-#### 3c. Start admit.py with the supplied first lines
+#### 3c. Save admit.py: supplied lines around your part (about 10 minutes)
 
-You will now save the supplied first lines of admit.py.
+You will now save admit.py in one paste.
 
-- The supplied lines read the environment variables and build the path of the candidate file.
-- The block after this one is yours.
-- The block prints ok when the file has content.
+- The first lines and the last two lines are supplied.
+- Your part is the gap between them, which is about four lines.
+- Before you press Enter, replace the comment lines that start with # inside the block with your own lines, using the spec in those comments.
+- Use run, result and text as the names, because the last two supplied lines use result and text.
+- Do not open the reference answer yet: try first.
+- The block prints ok when admit.py has content and a dry-run line.
 
 ```bash
 cd /workspace/grc-4
@@ -429,40 +432,6 @@ import subprocess
 
 manifest = os.environ["MANIFEST"]
 path = os.environ["CANDIDATE"] + "/" + manifest
-EOF
-test -s admit.py && echo ok || echo EMPTY
-
-```
-
-**Expected output:**
-
-```
-Example only.
-ok
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| `import json, os, subprocess` | Loads the three Python tools the script needs: JSON text, environment variables and running another program (`subprocess`). | Your lines use all three. |
-| test -s admit.py && echo ok \|\| echo EMPTY | Prints ok if admit.py has content and EMPTY if it has none. | A failed paste can leave the file empty. If EMPTY shows, paste the block again. |
-| manifest = os.environ["MANIFEST"] | Reads the candidate file name, for example good.yaml. | The same script then works for any candidate. |
-| path = ... | Joins the candidate folder and the file name. | This is the file you hand to oc. |
-
-#### 3d. Your part: write the dry run and the result (about 10 minutes)
-
-You will now write the dry run and the result in your own lines.
-
-- The spec is in the comment lines of this block.
-- Do not paste the block as it stands, because the comment lines add nothing to admit.py.
-- Type your own lines in place of the comment lines inside the heredoc (the text between the two EOF lines), and keep the first and last lines of the block.
-- The command cat >> adds your lines to the end of admit.py.
-- Use run, result and text as the names, because the next block uses result and text.
-- Do not open the reference answer yet: try first.
-- The last line of the block prints the size of admit.py in bytes.
-
-```bash
-cd /workspace/grc-4
-cat >> admit.py <<'EOF'
 # Your lines go here (about four). Use these names, the last two lines need them:
 #   run     the result of running: oc apply --dry-run=server -n demo -f <path>
 #           (capture the output as text)
@@ -470,54 +439,35 @@ cat >> admit.py <<'EOF'
 #   text    json.dumps of a dictionary with the keys manifest, result, message
 #           (message is the output and the error text of run joined together)
 # Then write text to the file policy-check.json in the folder named by EVIDENCE.
-EOF
-wc -c admit.py
-
-```
-
-**Expected output:**
-
-```
-Example only. The size is larger than it was after the first block.
-412 admit.py
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| cat >> admit.py <<'EOF' ... EOF | Adds what you type to the end of admit.py. The single > in the first block started the file; this one adds to it. | Your lines come after the supplied first lines and before the supplied last lines. |
-| wc -c admit.py | Prints the size of admit.py in bytes. | If the size did not grow, your lines were not saved; type the block again. |
-| run | The finished process of oc apply with --dry-run=server, -n demo and -f path. Use `subprocess.run` with `capture_output=True` and `text=True`. | The cluster, through Kyverno, answers whether it would admit the change, and nothing is created. |
-| result | The word admitted when `run.returncode` is 0, otherwise denied. | The bundle records a clear word and not only an exit code. |
-| text | json.dumps of a dictionary with manifest, result and message (`run.stdout` plus `run.stderr`). | The bundle task reads manifest and result from this file, so the key names must match. |
-| write to policy-check.json | Writes text to the file policy-check.json in the folder named by the EVIDENCE variable. | The record must exist even when the change is denied, so it is written before the script can exit. |
-
-#### 3e. Finish admit.py with the supplied last lines
-
-You will now add the supplied last two lines to admit.py.
-
-- The first of the two lines prints your record, and the second fails the task when the change was denied.
-
-```bash
-cd /workspace/grc-4
-cat >> admit.py <<'EOF'
 print(text)
 raise SystemExit(0 if result == "admitted" else 1)
 EOF
+test -s admit.py && grep -q 'dry-run=server' admit.py && echo "ok: admit.py has your lines" || echo "NOT READY: admit.py is empty or has no dry-run line; write your lines and run the block again"
 
 ```
 
 **Expected output:**
 
 ```
-Example only. Saving the lines prints nothing.
+Example only. Your lines will differ.
+ok: admit.py has your lines
 ```
 
 | Part | What it does | Why you run it |
 | --- | --- | --- |
-| print(text) | Shows the record in the task log. | You read the answer in the log of the run. |
-| raise SystemExit(0 if result == "admitted" else 1) | Ends the script with success for an admitted change and an error for a denied one. | A denied change must stop the run, so that no bundle is made for it. |
+| cat > admit.py <<'EOF' ... EOF | Saves everything between the first and last line as admit.py in one go. The quotes around EOF keep the text as typed. | One file, one paste: the supplied lines and yours end up together in the same file. |
+| `import json, os, subprocess` (supplied) | Loads the three Python tools the script needs: JSON text, environment variables and running another program (`subprocess`). | Your lines use all three. |
+| manifest = os.environ["MANIFEST"] (supplied) | Reads the candidate file name, for example good.yaml. | The same script then works for any candidate. |
+| path = ... (supplied) | Joins the candidate folder and the file name. | This is the file you hand to oc. |
+| run (yours) | The finished process of oc apply with --dry-run=server, -n demo and -f path. Use `subprocess.run` with `capture_output=True` and `text=True`. | The cluster, through Kyverno, answers whether it would admit the change, and nothing is created. |
+| result (yours) | The word admitted when `run.returncode` is 0, otherwise denied. | The bundle records a clear word and not only an exit code. |
+| text (yours) | json.dumps of a dictionary with manifest, result and message (`run.stdout` plus `run.stderr`). | The bundle task reads manifest and result from this file, so the key names must match. |
+| write to policy-check.json (yours) | Writes text to the file policy-check.json in the folder named by the EVIDENCE variable. | The record must exist even when the change is denied, so it is written before the script can exit. |
+| print(text) (supplied) | Shows the record in the task log. | You read the answer in the log of the run. |
+| raise SystemExit(0 if result == "admitted" else 1) (supplied) | Ends the script with success for an admitted change and an error for a denied one. | A denied change must stop the run, so that no bundle is made for it. |
+| test -s admit.py && grep -q 'dry-run=server' admit.py && echo ok \|\| echo NOT READY | Prints ok if admit.py has content and a dry-run line, and NOT READY if not. | Pasting the block without writing your lines leaves no dry run in the file, and the policy check would fail later with a Python error. |
 
-#### 3f. Save the bundle task
+#### 3d. Save the bundle task
 
 You will now save this YAML as evidence-bundle.yaml in the module folder.
 
@@ -606,7 +556,7 @@ Example only. Saving the file prints nothing.
 | verify step: cosign verify-blob --bundle | Checks the signature right away. A failure here stops the run. | A bad signature should stop the run at once, before a bundle that cannot be verified is kept. |
 | publish step | Hands the bundle and its signature to the pipeline as results. | Results are how the pipeline keeps the bundle and signature after the pod is gone, so you read them back from the run record. |
 
-#### 3g. Save your script, check and apply the three tasks
+#### 3e. Save your script, check and apply the three tasks
 
 You will now save admit.py as the config map admit-script, check the scan task file with a dry run, apply all three task files, and list the tasks.
 
@@ -647,7 +597,7 @@ evidence-scan  ...  <age>
 | oc apply -f ... -f ... -f ... | Saves all three tasks. Each YAML above is its own file. Applying again just updates them. | The pipeline in Step 4 refers to these tasks by name, so they must exist first. |
 | tkn task list | Lists the saved tasks. Your three should be there. | It confirms all three tasks were saved before you wire them together. |
 
-#### 3h. Check your script on the good candidate
+#### 3f. Check your script on the good candidate
 
 You will now run the policy check task alone on the good candidate, whose answer you already know: admitted.
 
@@ -683,7 +633,7 @@ TaskRun started: evidence-policy-run-<id>
 | -w name=evidence,claimName=evidence-work | Gives the task the shared evidence folder. The lab created this storage, named evidence-work, for you. | Your script writes policy-check.json here. |
 | [admit] {..."result": "admitted"...} | The line your print(text) wrote. The result must be admitted. | This is the positive check against the known answer. The negative check is Test 4. |
 
-#### 3i. Only after you have tried: the reference answer
+#### 3g. Only after you have tried: the reference answer
 
 You will now read the reference answer, but only after you have tried to write your own lines and run the check above.
 
@@ -711,7 +661,7 @@ raise SystemExit(0 if result == "admitted" else 1)
 
 > **TIP:** Keep these files in git so changes to the pipeline are reviewed like any other change (CM-3).
 
-> **YOUR TURN:** Paste the scan task and the bundle task. Copy out the policy task, write your own lines in admit.py from the spec, then save the script, apply the three tasks and run the policy check on the good candidate. Open the reference answer only after you have tried.
+> **YOUR TURN:** Paste the scan task and the bundle task. Copy out the policy task, save admit.py with your own lines in the gap from the spec, then save the script to the cluster, apply the three tasks and run the policy check on the good candidate. Open the reference answer only after you have tried.
 
 > **CHECKPOINT:** tkn lists evidence-scan, evidence-policy and evidence-bundle, and the policy check run alone prints a record with result admitted for good.yaml.
 
@@ -1137,6 +1087,7 @@ Each term is also explained the first time it appears. In Word, hover over an un
 | Evidence bundle | One file that holds the results of a run and the facts about it, signed so a change can be detected. |
 | Exit code | A number a command returns when it ends. Zero means success. Any other number means failure. |
 | Gate | A check that stops the pipeline if it fails. |
+| grep | A command that prints only the lines that match a pattern. |
 | Hash | A fixed-length fingerprint of content. The same content always gives the same hash. |
 | Heredoc | A way to save typed text into a file from the shell: everything between the first EOF line and the last EOF line becomes the file. |
 | Image | A packaged copy of a program with everything it needs. The cluster starts pods from images. |

@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 10 of 29 in the recommended order |
-| Timed work | About 73 minutes (49 hands-on, 24 verify) |
+| Sequence | Module 11 of 32 in the recommended order |
+| Timed work | About 71 minutes (47 hands-on, 24 verify) |
 | Standalone start | `lab start grc-3` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | OpenShift Container Platform, OpenShift Pipelines (Tekton), Gitea (in-lab git server), oc, git, curl, jq, openssl, Python 3 |
@@ -505,11 +505,11 @@ Example only. Your branch and commit details will differ.
 
 ### Step 5. Write the CronJob that runs it on a schedule (CA-7 Continuous Monitoring)
 
-**Learning point: Writing and deploying the CronJob makes the collector run without a person and fetch only from main, so the schedule inherits the review.**
+**Learning point: Writing the fetch line and deploying the CronJob makes the collector run without a person and fetch only from main, so the schedule inherits the review.**
 
 - The CronJob fetches the collector from main on every run, so only reviewed code can reach the schedule.
 - The job's only writable location is the evidence volume.
-- You write the identity, the evidence folder and the fetch-and-run command.
+- You write the fetch-and-run command; the identity and the evidence folder are supplied and explained.
 
 What this step adds (thick lines and outlines are new):
 
@@ -582,11 +582,12 @@ ok
 | initContainers get-oc | Copies the oc program out of the public image quay.io/openshift/origin-cli:4.22.0 into the oc-bin volume, then ends. | The Python image has no oc and the collector calls oc. Its fields (name, image, command, volumeMounts) are the pattern for your entry. |
 | containers: - name: collect, image, envFrom | Starts the main container. The image is the public Python image registry.access.redhat.com/ubi9/python-312:1, and envFrom gives the pod the Gitea address and owner name from the config map evidence-source. | A fixed public version means every learner runs the same tools. The config map holds the address and no secret. |
 
-#### 5b. Write the end of the CronJob
+#### 5b. Finish the end of the CronJob
 
-You will now write the rest of the file as cronjob-tail.yaml.
+You will now save the rest of the file as cronjob-tail.yaml.
 
-- Replace each WRITE line with your answer, using the table below.
+- Three of its parts are filled in for you and explained in the table: the evidence folder, the mount path and the identity.
+- One line is yours to write: replace the WRITE line with your answer, using the table below.
 - Line up the spaces with the lines around it, because YAML reads the spaces as structure.
 - If you paste the block unchanged, the check in 5c fails on purpose.
 - The block prints ok when the file has content; if EMPTY shows, type it again.
@@ -596,7 +597,7 @@ cd /workspace/grc-3/evidence-work
 cat > cronjob-tail.yaml <<'EOF'
               env:
                 - name: EVIDENCE_DIR
-                  value: # WRITE the one folder the collector may write to
+                  value: /evidence
                 - name: PATH
                   value: /oc-bin:/opt/app-root/bin:/usr/bin:/bin
               command: ["/bin/sh", "-c"]
@@ -604,10 +605,10 @@ cat > cronjob-tail.yaml <<'EOF'
                 - # WRITE one shell line: fetch the collector from main, then run it
               volumeMounts:
                 - name: evidence
-                  mountPath: # WRITE where the evidence volume appears
+                  mountPath: /evidence
                 - name: oc-bin
                   mountPath: /oc-bin
-          # WRITE the service account line here, indented like "containers:" above
+          serviceAccountName: evidence-runner
 EOF
 test -s cronjob-tail.yaml && echo ok || echo EMPTY
 
@@ -622,17 +623,17 @@ ok
 
 | Part | What it does | Why you run it |
 | --- | --- | --- |
-| env EVIDENCE_DIR | Write the folder the evidence volume appears at inside the container: /evidence. The same word goes in the volume mount below. | The collector reads this name and the gate checks that every write starts from it, so the pod and the script must agree on one folder. |
+| env EVIDENCE_DIR (already filled in) | The folder the evidence volume appears at inside the container: /evidence. The same word is used in the volume mount below. | The collector reads this name and the gate checks that every write starts from it, so the pod and the script must agree on one folder. |
 | env PATH (already filled in) | Puts the oc-bin folder first in PATH, the list of folders the shell searches for programs, so the shell finds the oc that get-oc left there. | Without it the collector cannot find oc, because oc is not in the Python image. |
-| args | Write one line for the shell to run. Use curl with -sf (-s is quiet, -f fails on a web error) to fetch collect_evidence.py from the main branch and save it as /tmp/collect_evidence.py. The address is $GITEA_URL/$GITEA_USER/evidence-scripts/raw/branch/main/collect_evidence.py. Join the next command to it with && so it runs only if the download worked: python3 /tmp/collect_evidence.py. | Fetching from main on every run is what makes the schedule inherit the review, and && stops a failed download from running an old or empty file. Write the two variables as shown; the pod fills them in. |
-| volumeMounts evidence | Write the same folder as EVIDENCE_DIR for mountPath. | A path that differs from EVIDENCE_DIR would send the evidence to the pod's own disk, which is lost when the pod ends. |
-| serviceAccountName | Write the line serviceAccountName: evidence-runner, the read-only identity the lab made. It goes at the same indent as containers: above, after the container entry. | The job holds read access only, so a flaw in the collector cannot change the cluster. |
+| args (you write this) | Write one line for the shell to run. Use curl with -sf (-s is quiet, -f fails on a web error) to fetch collect_evidence.py from the main branch and save it as /tmp/collect_evidence.py. The address is $GITEA_URL/$GITEA_USER/evidence-scripts/raw/branch/main/collect_evidence.py. Join the next command to it with && so it runs only if the download worked: python3 /tmp/collect_evidence.py. | Fetching from main on every run is what makes the schedule inherit the review, and && stops a failed download from running an old or empty file. Write the two variables as shown; the pod fills them in. |
+| volumeMounts evidence (already filled in) | The mountPath is the same folder as EVIDENCE_DIR, /evidence. | A path that differs from EVIDENCE_DIR would send the evidence to the pod's own disk, which is lost when the pod ends. |
+| serviceAccountName (already filled in) | Runs the job as evidence-runner, the read-only identity the lab made. It sits at the same indent as containers: above, after the container entry. | The job holds read access only, so a flaw in the collector cannot change the cluster. |
 
 #### 5c. Check your file against the spec, then check the check
 
 You will now join your two parts, run the lab's check on the result, run the same check on a copy with the wrong identity, and ask the cluster what each identity may read.
 
-- If a line starts with FAIL, read the message, which names the property that is wrong, fix it by running the 5b block again with your corrected answers, and then run this block again.
+- If a line starts with FAIL, read the message, which names the property that is wrong, fix it by running the 5b block again with your corrected answer, and then run this block again.
 - An error right after the join usually means cronjob-tail.yaml or cronjob-head.yaml is empty: write it again.
 
 ```bash
@@ -677,6 +678,7 @@ no
 You will now print the reference tail from the lab and compare it with your own.
 
 - Do not open the reference until you have tried and run the check in 5c at least once.
+- The three filled-in parts will match; compare the args line.
 - Yours may differ in wording and still be right if the check passes.
 
 ```bash
@@ -740,7 +742,7 @@ SHA256 <64-character hash>
 | oc logs job/... > job.txt | Keeps the job's log. The script printed the file name, the hash and the evidence. | The hash check in Test 2 reads the hash from this saved log. |
 | head -n 2 | Shows the file name and the hash. | These two lines are the file name and the hash that the hash check in Test 2 checks. |
 
-> **YOUR TURN:** Save the first part, write the end from the table, run the check until every line says PASS, then apply the file and run the job once.
+> **YOUR TURN:** Save the first part, write the one fetch line from the table, run the check until every line says PASS, then apply the file and run the job once.
 
 > **CHECKPOINT:** Every property prints PASS for your file and the bad copy prints FAIL for the service account. The job completes, and the first two lines of job.txt are FILE with an evidence name and SHA256 with 64 characters.
 
@@ -748,7 +750,7 @@ SHA256 <64-character hash>
 
 **How this meets the control**
 
-- **CA-7:** You write the identity, the evidence folder and the fetch-and-run command. Each run writes a time-stamped evidence file to the volume.
+- **CA-7:** You write the fetch-and-run command; the identity and the evidence folder are supplied. Each run writes a time-stamped evidence file to the volume.
 
 ## Section 4. Verify It Works
 

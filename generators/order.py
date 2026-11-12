@@ -8,9 +8,9 @@ IAC-1 is the entry level (levels 1 and 2), IAC-2 targets level 3 and IAC-3 targe
 
 TRACK = [
     "ENG-0", "ENG-1",
-    "GRC-2", "VM-2", "SDR-2", "CPS-2", "AID-2", "ARC-2", "IAC-1",
-    "GRC-3", "VM-3", "SDR-3", "CPS-3", "AID-3", "ARC-3", "IAC-2",
-    "GRC-4", "VM-4", "SDR-4", "CPS-4", "AID-4", "ARC-4", "IAC-3",
+    "GRC-2", "VM-2", "SDR-2", "CPS-2", "AID-2", "AI-1", "ARC-2", "IAC-1",
+    "GRC-3", "VM-3", "SDR-3", "CPS-3", "AID-3", "AI-3", "ARC-3", "IAC-2",
+    "GRC-4", "VM-4", "SDR-4", "CPS-4", "AID-4", "AI-2", "ARC-4", "IAC-3",
     "GRC-5", "VM-5", "SDR-5", "CPS-5", "AID-5", "ARC-5",
 ]
 

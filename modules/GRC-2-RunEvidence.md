@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 3 of 29 in the recommended order |
-| Timed work | About 71 minutes (52 hands-on, 19 verify) |
+| Sequence | Module 3 of 32 in the recommended order |
+| Timed work | About 68 minutes (49 hands-on, 19 verify) |
 | Standalone start | `lab start grc-2` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | OpenShift Container Platform, OpenShift Pipelines (Tekton), Kyverno (free, open source), oc, tkn, jq, Python 3 |
@@ -15,8 +15,8 @@
 - The collector is a script the lab supplies. It reads four things from the cluster: the FIPS setting, the required namespaces, the Kyverno policies and the API audit profile.
 - You run the collector by hand, then through a pipeline, and read every field of the evidence file.
 
-- **Skill:** Run a script that collects evidence from the cluster, read it field by field, write a check of your own, and deploy that check to the cluster.
-- **Tools:** `oc` reads the cluster, `jq` picks values out of the evidence, a Python collector script asks the questions, OpenShift Pipelines (Tekton) runs it without a person, and a config map carries your script onto the cluster.
+- **Skill:** Run a script that collects evidence from the cluster, read it field by field, and write a check of your own.
+- **Tools:** `oc` reads the cluster, `jq` picks values out of the evidence, a Python collector script asks the questions, OpenShift Pipelines (Tekton) runs it without a person, and a config map holds the script on the cluster.
 - **Security Function:** Detects configuration drift. Dated evidence shows whether the FIPS setting, the Kyverno policies and the API audit profile still match the documents. A run that could not read everything is marked incomplete instead of passing.
 - **NIST CA-7 Continuous Monitoring:** OpenShift Pipelines runs the collector without a person. Each run is one pass of monitoring, and its time and complete flag show how recent and how complete it was.
 - **NIST CM-6 Configuration Settings:** The collector records the settings in force, the Kyverno policies and the API audit profile. Your own check counts pods that do not require a non-root user, a setting a secure configuration baseline can require.
@@ -379,7 +379,7 @@ tkn lists the pipeline name, its parameters (inputs), its workspaces (shared fol
 
 #### 3b. Start the pipeline, read its evidence and compare it with Step 2
 
-You will now start one run as the service account, save its evidence in pipeline-evidence.json, check its age and compare it with facts.json from Step 2.
+You will now start one run as the service account, save its evidence in pipeline-evidence.json and compare it with facts.json from Step 2.
 
 - The first run pulls two public images, so the cluster needs internet and it can take a minute.
 
@@ -389,7 +389,6 @@ tkn pipeline start collect-evidence -n build -s evidence-runner \
   -w name=script,config=evidence-collector --showlog
 RUN=$(tkn pipelinerun describe --last -n build -o jsonpath='{.metadata.name}')
 oc get pipelinerun "$RUN" -n build -o jsonpath='{.status.results[?(@.name=="evidence")].value}' | tee pipeline-evidence.json | jq .
-jq '{age_minutes: (((now - (.collected_at | fromdate)) / 60) | floor)}' pipeline-evidence.json
 diff <(jq -S 'del(.collected_at)' facts.json) <(jq -S 'del(.collected_at)' pipeline-evidence.json) && echo same
 ```
 
@@ -405,9 +404,6 @@ Example only. Your time will differ.
   "checks": [ ...the same four checks as facts.json... ],
   "errors": []
 }
-{
-  "age_minutes": 2
-}
 same
 ```
 
@@ -422,12 +418,9 @@ same
 | describe --last | Finds the name of the run you just made. | You need the run's name to read its result. |
 | status.results | The values the run kept. The one named evidence is the collector's single line of JSON. | The evidence is kept in the run's record, which is where the next step and later modules read it. |
 | tee pipeline-evidence.json | Saves that line in a file as well as passing it on to jq. | A saved copy lets you read the result again without running the pipeline a second time. |
-| age_minutes | Subtracts the collected_at time in the file from now and prints the age in minutes. | Evidence is only usable while it is fresh; the lab limit is 24 hours. |
 | diff <(...) <(...) && echo same | Compares the evidence from Step 2 with this evidence, leaving out collected_at, which always differs. It prints same when everything else matches and the differing lines when it does not. | It answers the Step 2 versus Step 3 question with one word instead of reading two files by eye. |
 
-![Output from a real lab run: Start the pipeline, read its evidence and compare it with Step 2](img/GRC-2-shot-3b.png)
-
-> **CHECKPOINT:** The pipeline run succeeds, its evidence has complete true, the age is a few minutes (well inside the lab limit of 24 hours), and the last command prints same. If it prints lines instead, the pipeline and your run disagree: read them before you go on.
+> **CHECKPOINT:** The pipeline run succeeds, its evidence has complete true, and the last command prints same. If it prints lines instead, the pipeline and your run disagree: read them before you go on.
 
 > **TAKEAWAY:** Least privilege applies to the collector too: it can read the system and cannot change it.
 
@@ -492,13 +485,13 @@ true
 
 ### Step 5. Write one check of your own (CM-6 Configuration Settings)
 
-**Learning point: Writing a check that counts deployments whose pods are not required to run as non-root, testing it two ways and storing it on the cluster shows how to extend the collector with a question your team asks.**
+**Learning point: Writing a check that counts deployments whose pods are not required to run as non-root, and testing it two ways shows how to extend the collector with a question your team asks.**
 
 - Each check in the collector is one small function that asks the cluster one question.
 - You will write one more: deployments whose pods do not require a non-root user.
 - You read the deployments (what the team declared) because OpenShift adds a non-root setting to running pods on its own.
 - A container running as root gives an attacker more room if it is compromised.
-- Look at the data, write the check, test it two ways (a right answer, and a broken question that must fail cleanly), then deploy it.
+- Look at the data, write the check, test it two ways (a right answer, and a broken question that must fail cleanly).
 
 #### 5a. Look at the data before you write
 
@@ -647,35 +640,7 @@ Example only.
 | complete | False when any check failed. | A reader must not take an incomplete run as a clean one. |
 | root_pods: ... .status | Your check's status. It must say error, not collected. | An error recorded honestly is better evidence than a crash or a made-up number. |
 
-#### 5e. Deploy your check to the cluster and read it back
-
-You will now store your function in the cluster as a config map, as the lab does with the collector.
-
-- You then read the my-check config map back from the cluster.
-- Storing a script this way is how it gets onto a cluster for a pipeline to use.
-
-```bash
-cd /workspace/grc-2
-oc create configmap my-check -n build --from-file=my_check.py --dry-run=client -o yaml | oc apply -f -
-oc get configmap my-check -n build -o jsonpath='{.data.my_check\.py}'
-```
-
-**Expected output:**
-
-```
-Example only.
-configmap/my-check created
-def root_pods():
-    ...
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| oc create configmap my-check ... --dry-run=client -o yaml | Builds the config map from your file and prints it as YAML without sending it. | Creating it this way lets you run the command again without an already exists error. |
-| \| oc apply -f - | Sends that YAML to the cluster. | This is the step that puts your script on the cluster. |
-| oc get configmap my-check -n build -o jsonpath=... | Prints the stored file back. | Proves the cluster holds the same function you wrote. |
-
-#### 5f. Compare your line with the reference answer (after you tried)
+#### 5e. Compare your line with the reference answer (after you tried)
 
 Do this only after your check gave the right result.
 
@@ -700,9 +665,9 @@ def root_pods():
 | oc get configmap evidence-reference | Reads the config map that holds the reference answer. | It is stored on the cluster so it stays out of your way until you ask. |
 | jsonpath='{.data.my_check\.py}' | Picks out the file my_check.py. The backslash is needed because the file name has a dot. | Prints only the function, as in Step 1. |
 
-> **CHECKPOINT:** Your check lists the same deployment that the last command shows as unset, the broken copy shows complete false with root_pods error and no crash, and the config map my-check holds your function.
+> **CHECKPOINT:** Your check lists the same deployment that the last command shows as unset, the broken copy shows complete false with root_pods error and no crash; compare your line with the reference only after it works.
 
-> **TAKEAWAY:** Deploy what you write. A check that stays on your laptop collects nothing for anyone else.
+> **TAKEAWAY:** A check you cannot break on purpose is a check you cannot trust: prove it fails cleanly.
 
 **How this meets the control**
 
@@ -925,7 +890,6 @@ tkn pipeline start collect-evidence -n build -s evidence-runner \
   -w name=script,config=evidence-collector --showlog
 RUN=$(tkn pipelinerun describe --last -n build -o jsonpath='{.metadata.name}')
 oc get pipelinerun "$RUN" -n build -o jsonpath='{.status.results[?(@.name=="evidence")].value}' | tee pipeline-evidence.json | jq .
-jq '{age_minutes: (((now - (.collected_at | fromdate)) / 60) | floor)}' pipeline-evidence.json
 diff <(jq -S 'del(.collected_at)' facts.json) <(jq -S 'del(.collected_at)' pipeline-evidence.json) && echo same
 ```
 
@@ -969,10 +933,6 @@ oc get deployments -n grc2-workloads -o json | jq -r '.items[] | [.metadata.name
 cd /workspace/grc-2
 sed 's/"get", "deployments"/"get", "nonexistent"/' my_collect.py > my_collect_bad.py
 python3 my_collect_bad.py | jq '{complete, root_pods: (.checks[] | select(.id=="root-pods") | .status)}'
-
-cd /workspace/grc-2
-oc create configmap my-check -n build --from-file=my_check.py --dry-run=client -o yaml | oc apply -f -
-oc get configmap my-check -n build -o jsonpath='{.data.my_check\.py}'
 
 oc get configmap evidence-reference -n build -o jsonpath='{.data.my_check\.py}'
 ```

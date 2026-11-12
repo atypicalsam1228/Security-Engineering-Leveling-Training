@@ -2,7 +2,7 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 29 of 29 in the recommended order |
+| Sequence | Module 32 of 32 in the recommended order |
 | Timed work | About 62 minutes (46 hands-on, 16 verify) |
 | Standalone start | `lab start arc-5` |
 | Combined start | Continue from the end state of the previous module |
@@ -212,7 +212,7 @@ Example only.
 
 | Part | What it does | Why you run it |
 | --- | --- | --- |
-| cd ... cat > flows.yaml <<'EOF' ... EOF | Moves into the arc folder and writes the text between the first and last line into flows.yaml. The quotes around EOF keep the text exactly as typed. | The lab has no editor, so a paste is how you make a file. The check on the last line shows the paste arrived whole. |
+| cd ... cat > flows.yaml <<'EOF' ... EOF | Moves into the arc folder and writes the text between the first and last line into flows.yaml. The quotes around EOF keep the text exactly as typed. | The lab has no editor, so a paste is how you make a file. |
 | namespace: arc-ref | The project (a named section of the cluster) the list describes. Every generated object is placed there. | Puts every generated object in the right project, so none lands somewhere unexpected. |
 | flows | A list. Every entry is one allowed flow. | One entry per allowed path means the list is the whole architecture. |
 | from, to | The app label (a key=value tag on a pod) of the caller and of the receiver. These are the component names. | Names components by the label the policies select on, so the list and the cluster speak the same words. |
@@ -266,7 +266,7 @@ What this step adds (thick lines and outlines are new):
 
 You will now make the script `gen_netpol.py` in your arc folder by pasting the whole block at once into the lab shell.
 
-- The last line checks that Python can read it; you run it in the third block.
+- You run it in the third block.
 
 Look for these as you read:
 
@@ -309,19 +309,17 @@ with open(out_path, "w") as out:
     yaml.safe_dump_all(docs, out, sort_keys=True)
 print("wrote %d policies, flows hash %s" % (len(docs), digest))
 EOF
-python3 -m py_compile gen_netpol.py && echo gen_netpol.py parses
 ```
 
 **Expected output:**
 
 ```
-Example only.
-gen_netpol.py parses
+No output. The prompt returns when the paste has finished.
 ```
 
 | Part | What it does | Why you run it |
 | --- | --- | --- |
-| `cd ... cat > gen_netpol.py <<'EOF' ... EOF` | Moves into the arc folder and writes the text between the first and last line into `gen_netpol.py`. The quotes around EOF keep the text exactly as typed. | The lab has no editor, so a paste is how you make a file. The check on the last line shows the paste arrived whole. |
+| `cd ... cat > gen_netpol.py <<'EOF' ... EOF` | Moves into the arc folder and writes the text between the first and last line into `gen_netpol.py`. The quotes around EOF keep the text exactly as typed. | The lab has no editor, so a paste is how you make a file. |
 | `flows_path, out_path = sys.argv[1], sys.argv[2]` | The input file and the output file come from the command line. | The same script serves any list, so you never edit the generator to change the architecture. |
 | `digest = sha256(file)[:12]` | The first 12 characters of a fingerprint of the file. It changes whenever the file changes. | Stamps every object with the version of the list it came from, which makes a stale object visible later. |
 | `def netpol(...)` | Builds one network policy as a dictionary (a Python structure of names and values). An empty rule means deny all. | One function builds every policy, so they all have the same shape. |
@@ -333,7 +331,7 @@ gen_netpol.py parses
 
 You will now make the script gen_admission.py in your arc folder by pasting the whole block at once into the lab shell.
 
-- The last line checks that Python can read it; you run it in the next block.
+- You run it in the next block.
 
 Look for these as you read:
 
@@ -379,19 +377,17 @@ with open(out_path, "w") as out:
     yaml.safe_dump(policy, out, sort_keys=True)
 print("wrote the admission check for %s, flows hash %s" % (", ".join(apps), digest))
 EOF
-python3 -m py_compile gen_admission.py && echo gen_admission.py parses
 ```
 
 **Expected output:**
 
 ```
-Example only.
-gen_admission.py parses
+No output. The prompt returns when the paste has finished.
 ```
 
 | Part | What it does | Why you run it |
 | --- | --- | --- |
-| cd ... cat > gen_admission.py <<'EOF' ... EOF | Moves into the arc folder and writes the text between the first and last line into gen_admission.py. The quotes around EOF keep the text exactly as typed. | The lab has no editor, so a paste is how you make a file. The check on the last line shows the paste arrived whole. |
+| cd ... cat > gen_admission.py <<'EOF' ... EOF | Moves into the arc folder and writes the text between the first and last line into gen_admission.py. The quotes around EOF keep the text exactly as typed. | The lab has no editor, so a paste is how you make a file. |
 | apps = sorted({...}) | Every component name that appears in any flow, as the allowed set. | Builds the set of allowed component names from the list itself. |
 | `def rule(...)` | Builds one Kyverno rule that applies to create and update requests in the project and refuses a request that fails the pattern. | Makes both rules from one shape, so they refuse in the same way. |
 | label = {...arc-flows: digest} | The pattern for network policies: the label must equal the current hash. | Refuses a network policy that was not generated from the current list. |
@@ -407,11 +403,9 @@ cd "$HOME/arc"
 mkdir -p generated
 python3 gen_netpol.py flows.yaml generated/networkpolicies.yaml
 python3 gen_admission.py flows.yaml generated/admission.yaml
-oc apply -f generated/admission.yaml --dry-run=server
 oc apply -f generated/admission.yaml
 oc wait clusterpolicy/arc-ref-flows --for=condition=Ready --timeout=120s
 oc rollout status deployment/kyverno-admission-controller -n kyverno --timeout=180s
-for try in 1 2 3; do oc apply -f generated/networkpolicies.yaml --dry-run=server && break; echo 'the Kyverno webhook is not answering yet, retrying'; sleep 15; done
 for try in 1 2 3; do oc apply -f generated/networkpolicies.yaml && break; echo 'the Kyverno webhook is not answering yet, retrying'; sleep 15; done
 oc get networkpolicy -n arc-ref --show-labels
 ```
@@ -422,10 +416,10 @@ oc get networkpolicy -n arc-ref --show-labels
 Example only. Hashes and ages will differ.
 wrote 4 policies, flows hash <hash>
 wrote the admission check for api, cache, db, web, flows hash <hash>
-The dry run lists clusterpolicy.kyverno.io/arc-ref-flows as created (server dry run), then the real apply lists it as created.
+clusterpolicy.kyverno.io/arc-ref-flows created (a re-run says configured or unchanged).
 clusterpolicy.kyverno.io/arc-ref-flows condition met
 deployment "kyverno-admission-controller" successfully rolled out
-The dry run and then the real apply list four networkpolicy objects as created (a re-run says configured or unchanged).
+Four networkpolicy objects created (a re-run says configured or unchanged). If the webhook was not answering yet, a retry message prints first.
 A warning that ClusterPolicy is deprecated may print after each oc command that touches Kyverno policies. It is harmless.
 Four network policies in arc-ref, each with the same arc-flows=<hash> label.
 ```
@@ -434,14 +428,11 @@ Four network policies in arc-ref, each with the same arc-flows=<hash> label.
 | --- | --- | --- |
 | cd ... mkdir -p generated | Moves into the arc folder and makes the folder for the generated files if it is not there. | The commands below use short names from here, and the folder must exist to receive the files. |
 | `gen_netpol.py ... gen_admission.py` | Write the two generated files. Never edit them. Edit the flow list and run these again. | Produce the objects from the list, so nobody writes the output by hand. |
-| --dry-run=server | Asks the cluster to check each file without saving it. | Catches a mistake in the generated files before they can change the cluster. |
 | oc apply -f generated/admission.yaml | Installs the admission check first, so the network policies that follow are checked by it. | The guard goes first, so the policies that follow are checked by it. |
 | oc wait ... Ready | Waits until Kyverno reports the policy ready. | A rule that is not ready yet would not check the next apply. |
 | oc rollout status deployment/kyverno-admission-controller | Waits until the Kyverno component that answers admission requests is fully running. | The policy can be Ready before the component that serves the check is answering, and a request sent too early fails with connection refused. |
 | for try in 1 2 3; do ... && break; ...; done | Tries the apply up to three times, stopping at the first success and pausing 15 seconds between tries. | If Kyverno restarts at the wrong moment, a second try succeeds, so a short outage does not stop you. |
 | --show-labels | Shows the flows hash on every network policy. | Confirms each policy carries the current hash. |
-
-![Output from a real lab run: Generate both files and apply them](img/ARC-5-shot-2c.png)
 
 > **TIP:** Because both generators write in a fixed order, running them twice gives byte-identical files. Test 2 checks that.
 
@@ -472,7 +463,7 @@ What this step adds (thick lines and outlines are new):
 
 You will now make the script live_net.py in your arc folder by pasting the whole block at once into the lab shell.
 
-- The last line checks that Python can read it; conformance.py uses it.
+- conformance.py uses it.
 
 Look for these as you read:
 
@@ -521,19 +512,17 @@ def reachable(ns, apps, ports):
     with ThreadPoolExecutor(max_workers=12) as pool:
         return {r for r in pool.map(one, pairs) if r}, len(pairs)
 EOF
-python3 -m py_compile live_net.py && echo live_net.py parses
 ```
 
 **Expected output:**
 
 ```
-Example only.
-live_net.py parses
+No output. The prompt returns when the paste has finished.
 ```
 
 | Part | What it does | Why you run it |
 | --- | --- | --- |
-| cd ... cat > live_net.py <<'EOF' ... EOF | Moves into the arc folder and writes the text between the first and last line into live_net.py. The quotes around EOF keep the text exactly as typed. | The lab has no editor, so a paste is how you make a file. The check on the last line shows the paste arrived whole. |
+| cd ... cat > live_net.py <<'EOF' ... EOF | Moves into the arc folder and writes the text between the first and last line into live_net.py. The quotes around EOF keep the text exactly as typed. | The lab has no editor, so a paste is how you make a file. |
 | `def oc_json(args)` | Runs oc and returns its JSON answer, or nothing if the command failed. | Gives the other functions one safe way to ask the cluster, so a failed command gives a clear nothing and not a crash. |
 | `def policy_flows(ns)` | Works out which flows the live policies allow, as (from, to, port), and which components they select. | Reads what the cluster really allows, which can differ from what the list says. |
 | `def reachable(ns, apps, ports)` | Tries a TCP connection from each component to every other on each port, using oc exec in the app container. | A policy that says allowed proves nothing about traffic, so this opens real connections. |
@@ -543,7 +532,7 @@ live_net.py parses
 
 You will now make the script drift_rules.py in your arc folder by pasting the whole block at once into the lab shell.
 
-- The last line checks that Python can read it; conformance.py uses it.
+- conformance.py uses it.
 
 Look for these as you read:
 
@@ -588,19 +577,17 @@ def find_drift(ns, listed, apps, digest, by_policy, by_traffic):
         drift.append(("admission check", (str(admission_hash()),)))
     return drift
 EOF
-python3 -m py_compile drift_rules.py && echo drift_rules.py parses
 ```
 
 **Expected output:**
 
 ```
-Example only.
-drift_rules.py parses
+No output. The prompt returns when the paste has finished.
 ```
 
 | Part | What it does | Why you run it |
 | --- | --- | --- |
-| cd ... cat > drift_rules.py <<'EOF' ... EOF | Moves into the arc folder and writes the text between the first and last line into drift_rules.py. The quotes around EOF keep the text exactly as typed. | The lab has no editor, so a paste is how you make a file. The check on the last line shows the paste arrived whole. |
+| cd ... cat > drift_rules.py <<'EOF' ... EOF | Moves into the arc folder and writes the text between the first and last line into drift_rules.py. The quotes around EOF keep the text exactly as typed. | The lab has no editor, so a paste is how you make a file. |
 | `def deployed_apps(ns)` | The app labels of the deployments that exist. | Lets the test see a component that nobody listed. |
 | `def policy_hashes(ns)` | The flows hash found on each live network policy. | Reveals a policy built from an older list. |
 | `def admission_hash()` | The hash the live admission rule enforces, or nothing when the rule is missing or not set to Enforce. | Shows whether the guard exists, enforces and matches the current list. |
@@ -610,13 +597,13 @@ drift_rules.py parses
 
 You will now make the script conformance.py in your arc folder by pasting the whole block at once into the lab shell.
 
-- The last line checks that Python can read it; you run it in the next block.
+- You run it in the next block.
 
 Look for these as you read:
 
 - listed holds the flows from the file. by_policy holds what the live policies allow. by_traffic holds what really connects.
 - A flow is confirmed only when it appears in listed, by_policy and by_traffic. Coverage is the share of listed flows that are confirmed.
-- The report lists every drift found, the pairs tested, and the time the run took.
+- The report lists every drift found, the pairs tested, the unlisted pairs that were blocked, and the time the run took.
 - The script exits with 1 when anything drifted and 0 when nothing did. A pipeline reads that number.
 
 ```bash
@@ -656,23 +643,22 @@ report = {
 print(json.dumps(report, indent=2))
 sys.exit(1 if drift else 0)
 EOF
-python3 -m py_compile conformance.py && echo conformance.py parses
 ```
 
 **Expected output:**
 
 ```
-Example only.
-conformance.py parses
+No output. The prompt returns when the paste has finished.
 ```
 
 | Part | What it does | Why you run it |
 | --- | --- | --- |
-| cd ... cat > conformance.py <<'EOF' ... EOF | Moves into the arc folder and writes the text between the first and last line into conformance.py. The quotes around EOF keep the text exactly as typed. | The lab has no editor, so a paste is how you make a file. The check on the last line shows the paste arrived whole. |
+| cd ... cat > conformance.py <<'EOF' ... EOF | Moves into the arc folder and writes the text between the first and last line into conformance.py. The quotes around EOF keep the text exactly as typed. | The lab has no editor, so a paste is how you make a file. |
 | listed = {...} | The flows from the file, as a set of (from, to, port). | The intended design in a form the code can compare. |
 | by_policy, _ = policy_flows(ns) | The flows the live policies allow. | The design as the policies describe it. |
 | by_traffic, tested = reachable(...) | The flows that really connect, and how many pairs were tried. | The design as real connections show it. |
 | confirmed = len(listed & by_policy & by_traffic) | Counts a flow as covered only when both the policy and the real connection agree with the list. | A flow counts only if the policy and the traffic both agree, which makes coverage mean something. |
+| unlisted_pairs_blocked | The number of tested pairs that the list does not allow and that really failed to connect: pairs tested, minus listed flows, minus any unlisted pair that did connect. With 12 pairs, 3 listed flows and no stray connection it is 9. | Shows the default deny working. If an unlisted pair connects, this number drops and the connection also appears in the drift list. |
 | sys.exit(1 if drift else 0) | A failing exit code when anything drifted. | The exit code is what a pipeline reads, so the test can stop a change. |
 
 #### 3d. Run the conformance test on the clean project

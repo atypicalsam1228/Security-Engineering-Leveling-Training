@@ -200,7 +200,7 @@ MODULE = {
     "tool_why": True,
     "hide_draft": True,
     "hover": True,
-    "minutes": {"hands_on": 45, "verify": 17},
+    "minutes": {"hands_on": 39, "verify": 17},
     "tools": [
         "OpenShift Container Platform",
         "Terraform (free, open source)",
@@ -552,15 +552,17 @@ MODULE = {
                 },
                 {
                     "lang": "hcl",
-                    "code": MAIN_TF,
-                    "label": "Read the main file",
-                    "intro": "You will now read baseline/main.tf, the file you just saved. You read this file and do not type it.",
+                    "code": "# main.tf\n" + MAIN_TF + "\n# variables.tf\n" + VARIABLES_TF + "\n# versions.tf\n" + VERSIONS_TF,
+                    "label": "Read the three Terraform files",
+                    "intro": "You will now read main.tf, variables.tf and versions.tf, the files you just saved, shown one after the other. You read these files and do not type them.",
                     "expect": "Nothing prints. This block is for reading.",
                     "look_for": [
                         "Five blocks that start with the word resource. Each names a kind of object (the first word in quotes) and a name that Terraform uses inside its own files (the second word).",
                         "The file holds no commands and no steps. It lists what should exist, and Terraform works out how to get there, which is what declarative means.",
                         "The default-deny block has a count line. It builds the policy once when the switch is true and not at all when it is false, so one value can switch the protection off.",
                         "The role binding gives the read-only role to a service account named report-reader. This module does not create that account with Terraform. Step 4 adds it with Ansible.",
+                        "Three variables with default values: the namespace name, the pod limit and the default-deny switch. A variable file can give a variable a different value. Test 2 in Section 4 does exactly that.",
+                        "The provider settings pin one exact version, point at the lab kubeconfig (the file that tells a tool how to reach the cluster) and list the annotations and labels the platform adds to the namespace, which Terraform must ignore.",
                     ],
                     "lines": [
                         ("kubernetes_namespace_v1 \"lab\"", "The namespace that holds everything else. Its name comes from a variable.", "Everything the baseline builds lives in one namespace, so it is easy to look at and to remove."),
@@ -571,19 +573,6 @@ MODULE = {
                         ("policy_types = [\"Ingress\", \"Egress\"]", "Blocks traffic coming in and going out, because no allow rules are listed.", "With no allow rules, blocking both directions leaves only what you allow on purpose later."),
                         ("kubernetes_role_v1 \"reader\"", "A role that may only get and list config maps.", "Read-only is the smallest access that still lets the account do a job."),
                         ("kubernetes_role_binding_v1 \"reader\"", "Gives that role to the service account report-reader in this namespace.", "A role does nothing until it is bound to an identity."),
-                    ],
-                },
-                {
-                    "lang": "hcl",
-                    "code": VARIABLES_TF + "\n" + VERSIONS_TF,
-                    "label": "Read the variables and the provider settings",
-                    "intro": "You will now read variables.tf and versions.tf, two more files you saved, shown one after the other. You read these files and do not type them.",
-                    "expect": "Nothing prints. This block is for reading.",
-                    "look_for": [
-                        "Three variables with default values: the namespace name, the pod limit and the default-deny switch. A variable file can give a variable a different value. Test 2 in Section 4 does exactly that.",
-                        "The provider settings pin one exact version, point at the lab kubeconfig (the file that tells a tool how to reach the cluster) and list the annotations and labels the platform adds to the namespace, which Terraform must ignore.",
-                    ],
-                    "lines": [
                         ("variable \"namespace\"", "The name of the namespace, default iac-lab.", "One place to see and change the name."),
                         ("variable \"pod_limit\"", "The pod limit as text, default 10.", "The quota value comes from here, so a changed value shows up as a change in the plan."),
                         ("variable \"enable_default_deny\"", "The switch for the default-deny policy, default true.", "Protections that can be switched need a default that keeps them on."),
@@ -609,7 +598,7 @@ MODULE = {
                     ],
                 },
             ],
-            "action": "Run the first block and read the next two. Find the line that can switch the default-deny policy off. Then run the last block.",
+            "action": "Run the first block, read the second, and find the line that can switch the default-deny policy off. Then run the last block.",
             "checkpoint": "baseline holds four files, init says it was successfully initialized, and validate says the configuration is valid. If validate prints an error, stop, copy the whole command and the error and ask your AI assistant.",
         },
         {
@@ -692,19 +681,17 @@ MODULE = {
                         "cd /workspace/iac-1/baseline\n"
                         "terraform plan -input=false -detailed-exitcode -out=repair.plan\n"
                         "echo \"exit code: $?\"\n"
-                        "terraform show -no-color repair.plan | grep -E 'will be|pods'\n"
-                        "terraform show -json repair.plan | jq -c '[.resource_changes[] | select(.change.actions != [\"no-op\"]) | {address, actions: .change.actions}]'"
+                        "terraform show -no-color repair.plan | grep -E 'will be|pods'"
                     ),
                     "label": "Ask Terraform what it sees",
                     "intro": "You will now run a plan again. Terraform reads the real objects first, so it should notice the hand edit.",
-                    "expect": "Example only. The exact lines depend on the provider.\nPlan: 0 to add, 1 to change, 0 to destroy.\nexit code: 2\n  # kubernetes_resource_quota_v1.limits will be updated in-place\n          ~ \"pods\" = \"50\" -> \"10\"\n[{\"address\":\"kubernetes_resource_quota_v1.limits\",\"actions\":[\"update\"]}]",
+                    "expect": "Example only. The exact lines depend on the provider.\nPlan: 0 to add, 1 to change, 0 to destroy.\nexit code: 2\n  # kubernetes_resource_quota_v1.limits will be updated in-place\n          ~ \"pods\" = \"50\" -> \"10\"",
                     "lines": [
                         ("cd /workspace/iac-1/baseline", "Moves into the Terraform folder.", "Terraform reads the files in the folder it runs in."),
                         ("-detailed-exitcode", "Makes the command exit with 0 when there is nothing to do, 2 when there are changes, and 1 when something is wrong.", "A script can act on the exit code without reading the text."),
                         ("-out=repair.plan", "Saves this plan too.", "Same rule as before: you apply the plan you read."),
                         ("echo \"exit code: $?\"", "Prints the exit code of the plan command, the one just before it.", "Shows the signal a script would use. Here it is 2, which means changes."),
                         ("grep -E 'will be|pods'", "Keeps only the lines that name the object being changed and the pod values.", "Cuts a long plan down to the lines that tell you what Terraform wants to change back."),
-                        ("select(.change.actions != [\"no-op\"])", "Keeps only the objects that have an action other than doing nothing.", "Leaves the one object that differs, with its action."),
                     ],
                 },
                 {
@@ -804,27 +791,8 @@ MODULE = {
             ],
             "learn": "Asking both tools the same question side by side shows that each tool only sees the objects its own files describe.",
             "takeaway": "A tool cannot report drift in an object it does not manage.",
-            "why": "Each tool reports that nothing needs doing in its own way: Terraform with exit code 0, Ansible with changed=0. Read the supplied summary script, run it when everything matches, change one thing by hand, and run it again to see which tool notices.",
+            "why": "Each tool reports that nothing needs doing in its own way: Terraform with exit code 0, Ansible with changed=0. Run the supplied summary script when everything matches, change one thing by hand, and run it again to see which tool notices.",
             "blocks": [
-                {
-                    "lang": "bash",
-                    "code": SUMMARY_SH,
-                    "label": "Read the summary script",
-                    "intro": "You will now read summary.sh, the file you saved in your folder. You read this file and do not type it.",
-                    "expect": "Nothing prints. This block is for reading.",
-                    "look_for": [
-                        "The script only asks questions: a Terraform plan and an Ansible check run. Nothing in it applies or changes anything.",
-                        "Terraform answers with an exit code, and the script turns that number into a sentence.",
-                        "Ansible answers with the changed count in its recap line, and the script pulls that number out with grep and sed.",
-                    ],
-                    "lines": [
-                        ("terraform plan -detailed-exitcode > /dev/null 2>&1", "Runs a plan, throws its text away, and keeps only the exit code.", "The exit code is the answer. The text is not needed here."),
-                        ("tf=$?", "Saves the exit code in a variable.", "The next lines test it, and the variable keeps the number."),
-                        ("if test \"$tf\" -eq 2", "Runs the lines inside only when the exit code is 2, which means changes.", "Turns a number into a sentence a person can read."),
-                        ("ansible-playbook ... --check | grep -E \"^localhost\" | sed ...", "Runs the playbook in check mode, keeps the recap line, and cuts out the changed number.", "Check mode makes sure the script cannot change the cluster."),
-                        ("${changed:-unknown}", "Uses the number, or the word unknown if it could not be read.", "A script that cannot find the answer should say so instead of printing nothing."),
-                    ],
-                },
                 {
                     "code": (
                         "cd /workspace/iac-1\n"
@@ -834,10 +802,15 @@ MODULE = {
                         "ansible-playbook -i localhost, baseline.yml --check --diff | grep -E -e '^--- before' -e 'baseline' -e '^localhost'"
                     ),
                     "label": "Run the summary, change something by hand, run it again",
-                    "intro": "You will now run the summary, change the settings record by hand, and run the summary again.",
+                    "intro": "You will now run the summary, change the settings record by hand, and run the summary again. The summary script is a file you saved in Step 1, and the table explains its main lines.",
                     "expect": "Example only. The layout of the diff may differ.\nterraform: the cluster matches the files (exit code 0)\nansible: 0 change(s) the playbook would make\nconfigmap/settings-record patched\nterraform: the cluster matches the files (exit code 0)\nansible: 1 change(s) the playbook would make\n(then the diff, which includes the lines with \"baseline\" in them: one showing changed-by-hand and one showing iac-1)",
                     "lines": [
-                        ("bash summary.sh", "Runs the supplied script. It prints one line per tool.", "The two lines are the answer, side by side."),
+                        ("bash summary.sh", "Runs the supplied script you saved in Step 1. It prints one line per tool. The next five rows are lines inside it.", "The two lines are the answer, side by side. The script only asks questions and changes nothing."),
+                        ("terraform plan -detailed-exitcode > /dev/null 2>&1", "Runs a plan, throws its text away, and keeps only the exit code.", "The exit code is the answer. The text is not needed here."),
+                        ("tf=$?", "Saves the exit code in a variable.", "The next lines test it, and the variable keeps the number."),
+                        ("if test \"$tf\" -eq 2", "Runs the lines inside only when the exit code is 2, which means changes.", "Turns a number into a sentence a person can read."),
+                        ("ansible-playbook ... --check | grep -E \"^localhost\" | sed ...", "Runs the playbook in check mode, keeps the recap line, and cuts out the changed number.", "Check mode makes sure the script cannot change the cluster."),
+                        ("${changed:-unknown}", "Uses the number, or the word unknown if it could not be read.", "A script that cannot find the answer should say so instead of printing nothing."),
                         ("oc patch configmap settings-record ...", "Changes the value in the settings record by hand.", "The settings record is in the playbook but not in the Terraform files."),
                         ("second bash summary.sh", "Runs the same script again.", "Terraform still says it matches, because it does not know about the record. Ansible says one change."),
                         ("--check --diff | grep ...", "Shows what Ansible would change back, keeping the lines with baseline in them: the before and after values.", "For an object that already exists you get a diff, so you can see what was changed."),

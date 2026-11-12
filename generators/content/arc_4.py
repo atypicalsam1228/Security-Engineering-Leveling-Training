@@ -82,7 +82,7 @@ MODULE = {
     "controls": ["SC-7", "SC-8", "SC-24", "SA-8"],
     "mentions": [],
     "unit_values_ok": ["15 seconds", "60 seconds", "8 minutes"],
-    "minutes": {"hands_on": 40, "verify": 12},
+    "minutes": {"hands_on": 39, "verify": 12},
     "terms_at_end": True,
     "tools": ["OpenShift Container Platform", "Kubernetes NetworkPolicy", "Red Hat OpenShift Service Mesh 3 (Istio based)", "oc", "jq", "python3"],
     "tool_why": True,
@@ -421,19 +421,17 @@ MODULE = {
                     "code": (
                         f"sed \"s/NS_NAME/arc-a/\" {ARC}/netpol.yaml\" | oc apply -f -\n"
                         f"sed \"s/NS_NAME/arc-b/\" {ARC}/netpol.yaml\" | oc apply -f -\n"
-                        "oc explain authorizationpolicy.spec.rules.from.source\n"
                         f"oc apply -f {ARC}/mesh.yaml\" --dry-run=server\n"
                         f"oc apply -f {ARC}/mesh.yaml\"\n"
                         "oc get pods -n arc-a\n"
                         "oc get pods -n arc-b"
                     ),
                     "label": 'Apply the policies to both projects and look at the pods',
-                    "screenshot": {"file": "ARC-4-shot-1b-excerpt.png", "alt": "Step 1, block 1b: the network policies and the mesh policies applied, and the pods of arc-a (1/1) and arc-b (2/2). The oc explain field list is left out.", "width": 6.0},
+                    "screenshot": {"file": "ARC-4-shot-1b-excerpt.png", "alt": "Step 1, block 1b: the network policies and the mesh policies applied, and the pods of arc-a (1/1) and arc-b (2/2).", "width": 6.0},
                     "intro": 'You will now put the network policies in both projects, check and apply the mesh file in arc-b, and list the pods. The supplied netpol.yaml denies all incoming traffic, then allows web to api and api to db on port 8080 by pod label alone, which is the weakness this module tests. The placeholder NS_NAME in netpol.yaml is replaced by the project name.',
-                    "expect": 'Example only. Names and ages will differ.\nnetworkpolicy.networking.k8s.io/default-deny-ingress created (and api-from-web, db-from-api), once for each project. A re-run prints unchanged instead of created.\nThe fields of the AuthorizationPolicy source, printed by oc explain.\nThe dry run lists peerauthentication and authorizationpolicy as created (server dry run), then the real apply lists them as created.\narc-a pods: web, api, db and the attack pods, each showing 1/1.\narc-b pods: web, api and db showing 2/2; the attack pod atk-copied-mesh shows 2/2 and the other two show 1/1.',
+                    "expect": 'Example only. Names and ages will differ.\nnetworkpolicy.networking.k8s.io/default-deny-ingress created (and api-from-web, db-from-api), once for each project. A re-run prints unchanged instead of created.\nThe dry run lists peerauthentication and authorizationpolicy as created (server dry run), then the real apply lists them as created.\narc-a pods: web, api, db and the attack pods, each showing 1/1.\narc-b pods: web, api and db showing 2/2; the attack pod atk-copied-mesh shows 2/2 and the other two show 1/1.',
                     "lines": [
                         ("sed \"s/NS_NAME/arc-a/\" ... | oc apply -f -", "Swaps the placeholder for the project name and applies the result.", "Puts the same network policies in both projects."),
-                        ("oc explain ...", "Prints the fields the installed mesh accepts, so you can compare them with the file.", "Confirms the field names before you apply the file, so a typo shows up as an explanation and not as a silent gap."),
                         ("--dry-run=server", "Asks the cluster to check the file without saving it.", "Catches mistakes in mesh.yaml before it can change anything."),
                         ("oc get pods", "In arc-a each pod shows 1/1 containers. In arc-b the web, api and database pods show 2/2: the program plus the sidecar.", "The 2/2 against 1/1 is how you see which pods have a sidecar, and that decides which design protects them."),
                     ],
@@ -572,8 +570,6 @@ MODULE = {
                     "code": (
                         "oc get deployment -n istio-system\n"
                         "oc scale deployment/istiod -n istio-system --replicas=0\n"
-                        "sleep 15\n"
-                        f"{HARNESS_RUN} arc-b | jq -c '.[\"arc-b\"].codes'\n"
                         "oc delete pod -n arc-a -l tier=db\n"
                         "oc delete pod -n arc-b -l tier=db\n"
                         "sleep 60\n"
@@ -586,13 +582,12 @@ MODULE = {
                         "oc rollout status deployment/db -n arc-b"
                     ),
                     "label": 'Stop the mesh control plane, recreate the database pods, then start it again',
-                    "intro": 'You will now stop the mesh control plane and run the cases against arc-b. You then recreate the database pod in each project, look at what happens, and start the control plane again. The block takes about 8 minutes, mostly waiting, so start it and let it run.',
-                    "expect": 'Example only. Names and ages will differ.\nThe deployment istiod in istio-system.\ndeployment scaled (to 0).\nOne line of JSON with the codes for arc-b.\nThe database pod in arc-a ready again. In arc-b the pod may be missing.\nFailedCreate events in arc-b that name the sidecar injection step, if the pod is missing.\ndeployment scaled (to 1), then rollout messages until istiod and the db deployment in arc-b are successfully rolled out.',
+                    "intro": 'You will now stop the mesh control plane, recreate the database pod in each project, look at what happens, and start the control plane again. The block takes about 8 minutes, mostly waiting, so start it and let it run.',
+                    "expect": 'Example only. Names and ages will differ.\nThe deployment istiod in istio-system.\ndeployment scaled (to 0).\nThe database pod in arc-a ready again. In arc-b the pod may be missing.\nFailedCreate events in arc-b that name the sidecar injection step, if the pod is missing.\ndeployment scaled (to 1), then rollout messages until istiod and the db deployment in arc-b are successfully rolled out.',
                     "lines": [
                         ("oc get deployment -n istio-system", "Shows the name of the mesh control plane deployment. The scale commands below assume it is `istiod`.", "Confirms the real name before you scale it, because the next command assumes it."),
                         ("--replicas=0", "Stops the mesh control plane. Existing sidecars keep the certificates they already hold.", "Simulates the failure of the part that issues certificates and adds sidecars."),
                         ("oc rollout restart deployment/db -n arc-b", "Starts the arc-b database again. After the failed creates the Deployment can sit in a retry delay, and the restart makes it create the pod now that the control plane is back.", "Without it the arc-b pod can stay missing for several minutes after the control plane returns."),
-                        ("harness ... arc-b", "Runs the cases again against arc-b with the control plane down, so you can see whether existing traffic is affected.", "Shows whether traffic that already flows depends on the control plane being up."),
                         ("oc delete pod -l tier=db", "Replaces the database pod in each project. The new pod in arc-b needs the sidecar added by the mesh control plane at creation time.", "Forces a new database pod to be created, which is when the control plane is needed."),
                         ("oc get pods ... tier=db", "Shows whether each new pod exists and is ready. In arc-b the pod may be missing altogether.", "Shows the state each design ends in: a new pod in arc-a and possibly none in arc-b."),
                         ("oc get events ... FailedCreate", "Shows why the pod is missing: the error from the sidecar injection check (the step where the mesh adds a sidecar to a new pod), which the stopped control plane cannot answer.", "Gives the reason in the cluster's own words, so you do not have to guess why the pod is missing."),

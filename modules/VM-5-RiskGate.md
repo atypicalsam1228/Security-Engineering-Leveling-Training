@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 25 of 29 in the recommended order |
-| Timed work | About 73 minutes (55 hands-on, 18 verify) |
+| Sequence | Module 28 of 32 in the recommended order |
+| Timed work | About 70 minutes (52 hands-on, 18 verify) |
 | Standalone start | `lab start vm-5` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | OpenShift Container Platform, OpenShift Pipelines (Tekton), Trivy (free, open source), Gitea (free, open source), python3, tkn, oc, jq |
@@ -223,13 +223,12 @@ rank.py
 
 #### 1b. Download the known-exploited list
 
-You will now download the KEV catalog, keep only its CVE IDs in a file, and count them.
+You will now download the KEV catalog, keep only its CVE IDs in a file.
 
 ```bash
 cd /workspace/vm-5
 CATALOG_URL=https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json
 curl -fsS "$CATALOG_URL" | jq -e '[.vulnerabilities[].cveID] | sort | select(length > 0)' > exploited-ids.json
-jq length exploited-ids.json
 ```
 
 **Expected output:**
@@ -244,7 +243,6 @@ Example only. The count grows as the catalog grows.
 | curl -fsS "$CATALOG_URL" | Downloads the catalog. -f makes curl fail on an HTTP error, -s hides the progress bar, -S still shows an error. | A failed download must not leave an error page to be read as a list. |
 | jq -e '[.vulnerabilities[].cveID] \| sort \| select(length > 0)' | Keeps the CVE ID of each entry in a sorted list, and produces nothing when the list is empty, which makes jq -e exit with a non-zero code. | The gate needs only the IDs, and an empty list would read as nothing exploited. |
 | > exploited-ids.json | Saves the list as a small file that goes into the ConfigMap in Step 4. | The platform owns the list, so every pipeline reads the same one. |
-| jq length exploited-ids.json | Prints how many IDs the list holds. | Shows the list is not empty before you rely on it. |
 
 #### 1c. Create policy.json
 
@@ -468,52 +466,11 @@ ok: all 10 cases
 | ok: all 10 cases | Every case came out as expected. | Your function is ready for the gate. |
 | not yet right: | Lists the cases that came out wrong, by name. | The name tells you which condition to look at. |
 
-#### 2e. Compare with the reference answer, only after you have tried
-
-You will now compare your file with the reference answer.
-
-- Run this block only after the check says ok, or after you have tried for about ten minutes.
-- Different lines are fine if your check says ok; to see the whole reference answer, type cat reference-rule_match.py.
-
-```bash
-cd /workspace/vm-5
-diff rule_match.py reference-rule_match.py || true
-```
-
-**Expected output:**
-
-```
-Example only. Nothing prints when your file is the same as the reference. Otherwise each differing line is shown, with < for yours and > for the reference.
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| diff rule_match.py reference-rule_match.py | Shows the lines where your file differs from the reference. | Another way of writing the same condition is fine. A real difference is worth understanding. |
-| \|\| true | diff exits with 1 when the files differ, which is not an error here. | Without it the shell would treat the difference as a failure. |
-
-#### 2f. Read the sample exceptions and predict their states
-
-You will now print the four sample exception entries so you can work out which are active, expired and invalid on 2026-10-29.
-
-```bash
-cd /workspace/vm-5 && cat exceptions-sample.json
-```
-
-**Expected output:**
-
-```
-Example only. Four entries are printed, each with its fields and expiry date.
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| cat exceptions-sample.json | Prints the four sample entries. | You predict each state from the fields and the expiry before the gate classifies them. |
-
 > **NOTE:** Spec for matches: a rule matches a finding only when every condition the rule names holds, and a condition the rule does not name is ignored. The five conditions, in order, are severity, fix, exploited, minimum age in days, and exposure. The first two are given.
 
-> **YOUR TURN:** Run the first block and read the two files. Paste the second block. Write your three conditions and run the third block. Run the check, fix your lines until it says ok, and only then compare with the reference. Then, before the code tells you, run the last block and work out which of the four sample entries are active, expired and invalid on 2026-10-29.
+> **YOUR TURN:** Run the first block and read the two files. Paste the second block. Write your three conditions and run the third block. Run the check and fix your lines until it says ok. Only then read reference-rule_match.py with cat, and compare it with yours.
 
-> **CHECKPOINT:** The check prints ok: all 10 cases, and you can name which of the four sample entries should be active, expired and invalid on 2026-10-29.
+> **CHECKPOINT:** The check prints ok: all 10 cases.
 
 > **TAKEAWAY:** The cases that must not match are as important as the ones that must; prove your function can say no.
 
@@ -523,7 +480,7 @@ Example only. Four entries are printed, each with its fields and expiry date.
 
 ### Step 3. Read the ledger, write the gate, and run it on fixtures (SI-2 Flaw Remediation, SA-11 Developer Testing and Evaluation)
 
-**Learning point: Running the gate on the supplied fixtures with a fixed date shows three findings block with named rules and the exception classification matches the prediction from Step 2.**
+**Learning point: Running the gate on the supplied fixtures with a fixed date shows three findings block with named rules and the sample exceptions are classified as active, expired and invalid.**
 
 - The supplied gate_ledger.py records dates and computes the time to fix; read it first.
 - gate.py ties rules, exceptions and ledger together, writes a result file, prints it, and exits 1 when anything blocks.
@@ -731,7 +688,7 @@ exit code: 1
 | gate.py --scan scan-before.json ... | Runs the gate on the fixture scan with the date fixed. The exposure is internal, the default. | Shows the gate on a known input, so you can check its answer before it runs in a pipeline. |
 | echo "exit code: $?" | Shows the gate's exit code. | The exit code is what a pipeline reads, so you see here what it will see. |
 | jq -c '.blocking[] \| ...' | Lists each blocking finding and the rules it matched. | Shows which rule blocks which finding, which is what a team would be told. |
-| jq -c .exceptions | Shows how many entries were active, expired and invalid. | Checks that the sample exceptions are classified the way you predicted in Step 2. |
+| jq -c .exceptions | Shows how many entries were active, expired and invalid. | Checks that the gate classifies each sample exception from its fields and expiry. |
 
 > **YOUR TURN:** Read the ledger code, paste the two parts of gate.py, then run the last block. The gate uses the rule_match.py you wrote in Step 2.
 

@@ -2,7 +2,7 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 4 of 29 in the recommended order |
+| Sequence | Module 4 of 32 in the recommended order |
 | Timed work | About 62 minutes (42 hands-on, 20 verify) |
 | Standalone start | `lab start vm-2` |
 | Combined start | Continue from the end state of the previous module |
@@ -350,7 +350,7 @@ config	deployment/legacy-web in vm-lab	config.json	0
 
 ### Step 4. Write an inventory of the image and scan it (RA-5 Vulnerability Monitoring and Scanning)
 
-**Learning point: Writing the image's package list to a file and scanning that file gives a fourth scan that reads the list instead of the image. The comparison with the Step 1 count shows whether the list is missing packages.**
+**Learning point: Writing the image's package list to a file and scanning that file gives a fourth scan that reads the list instead of the image. Writing the scan down in scans.tsv gives the hand-off script a line for it.**
 
 - An SBOM (software bill of materials) is a machine-readable list of the packages inside an image, and here you write one for the same image and scan it with trivy sbom.
 - The CycloneDX format (a standard SBOM format) writes the list alone, without findings.
@@ -362,9 +362,9 @@ What this step adds (thick lines and outlines are new):
 
 - Trivy writes an inventory file (an SBOM) of the same image in your folder, scans the inventory, and a fourth line goes into scans.tsv.
 
-#### 4a. Write the SBOM, scan it and compare with the image scan
+#### 4a. Write the SBOM and scan it
 
-You will now write the list of packages of the image to a file, count its entries, scan that file, write the scan down in scans.tsv, and compare the finding counts with the image scan.
+You will now write the list of packages of the image to a file, count its entries, scan that file, and write the scan down in scans.tsv.
 
 ```bash
 mkdir -p /workspace/vm-2 && cd /workspace/vm-2
@@ -373,7 +373,7 @@ trivy image --quiet --format cyclonedx --output image-sbom.json "$IMAGE"
 jq '{format: .bomFormat, spec: .specVersion, components: (.components | length)}' image-sbom.json
 trivy sbom --scanners vuln --quiet --format json --output sbom.json image-sbom.json
 printf 'sbom\t%s\tsbom.json\t%s\n' "image-sbom.json" "$?" >> scans.tsv
-jq '[.Results[]?.Vulnerabilities[]?] | length' sbom.json image.json
+
 ```
 
 **Expected output:**
@@ -385,9 +385,6 @@ Example only. Your counts will differ.
   "spec": "<version>",
   "components": <n>
 }
-<n>
-<n>
-(the first number is the SBOM scan, the second is the image scan from Step 1; they should be close, and a difference of a few findings is possible)
 ```
 
 | Part | What it does | Why you run it |
@@ -396,13 +393,12 @@ Example only. Your counts will differ.
 | jq '{format: ..., components: ...}' | Prints the format name, its version and how many components (packages and the operating system) the list holds. | Shows the file is a real CycloneDX list with entries, before you scan it. |
 | trivy sbom --scanners vuln ... image-sbom.json | Scans the list for known package flaws and saves a JSON report in the same shape as the other scans. | This is the fourth scan: it finds flaws from the inventory alone, which is how you re-check a stored release. |
 | printf 'sbom\t...' >> scans.tsv | Adds the fourth line to the list with the exit code of the scan. | The hand-off script treats this scan like the others, so a failed one cannot read as clean. |
-| jq ... sbom.json image.json | Prints the number of findings in each report. | A large gap would mean the list is missing packages, so you compare before you trust it. |
 
-![Output from a real lab run: Write the SBOM, scan it and compare with the image scan](img/VM-2-shot-4a.png)
+![Output from a real lab run: Write the SBOM and scan it](img/VM-2-shot-4a.png)
 
 > **NOTE:** An SBOM written by Trivy carries extra properties that Trivy reads back, so a list from another tool can give less accurate results.
 
-> **YOUR TURN:** Run the commands and read the two finding counts.
+> **YOUR TURN:** Run the commands and read the component count.
 
 > **CHECKPOINT:** The SBOM has a CycloneDX format and components above zero, and scans.tsv shows four lines.
 

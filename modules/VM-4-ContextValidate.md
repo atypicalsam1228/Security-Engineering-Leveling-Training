@@ -2,7 +2,7 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 18 of 29 in the recommended order |
+| Sequence | Module 20 of 32 in the recommended order |
 | Timed work | About 67 minutes (47 hands-on, 20 verify) |
 | Standalone start | `lab start vm-4` |
 | Combined start | Continue from the end state of the previous module |
@@ -200,7 +200,6 @@ The table shows each tier, the rule that puts a finding in it, and the action it
 
 **Learning point: Running the facts script turns three things you check by hand (running, exposed, critical) into facts.json, the context the plan joins to every finding.**
 
-- Look at the facts by hand first, so you know what the script will read.
 - The supplied facts_lib.py runs oc for you, so you read it and do not retype it.
 - You then write the script that saves one record for every Deployment in the lab projects.
 
@@ -210,36 +209,28 @@ What this step adds (thick lines and outlines are new):
 
 - Scripts in lab shell read the facts about each workload from the cluster and write them to facts.json in your folder: is it running, is a route exposing it, is its project marked critical.
 
-#### 1a. Fetch the supplied files and look at the cluster by hand
+#### 1a. Fetch the supplied files
 
-You will now copy the supplied files out of the cluster and look at the three workloads and the route with oc, which changes nothing.
+You will now copy the supplied files out of the cluster into your folder.
 
 ```bash
 mkdir -p /workspace/vm-4 && cd /workspace/vm-4
 oc extract configmap/vm-tools -n security-tools --to=. --confirm
-oc get deployments -A | grep -e vm-lab -e vm-internal -e vm-batch
-oc get routes -n vm-lab
 ```
 
 **Expected output:**
 
 ```
-Example only. Your columns and ages will differ.
+Example only.
 deadlines.py
 facts_lib.py
 rank.py
-(a line for each of the three workloads: batch-old, report-svc and legacy-web, with their ready counts)
-(one Route in vm-lab, with its host and the Service it points at)
 ```
 
 | Part | What it does | Why you run it |
 | --- | --- | --- |
 | mkdir -p ... && cd ... | Makes a folder for this module and moves into it, so files from other modules cannot collide with yours. The folder persists between lab sessions. | Gives the files of this module one folder, so the scripts and their outputs sit together. |
 | oc extract ... --confirm | Fetches the supplied rank.py and deadlines.py, which are the files you wrote in the previous module, and facts_lib.py, the helper shown in the next block. This module uses rank.py in Step 2 and does not use deadlines.py. | The supplied helper files are kept in the cluster, so you copy them into your folder before the scripts import them. |
-| oc get deployments -A \| grep ... | Lists the three workloads and how many replicas are ready. | Shows by hand the first fact, running or not, before a script reads it for you. |
-| oc get routes -n vm-lab | Shows the Route that exposes one workload and the Service it points at. | A route is the second fact: it is what makes a workload reachable from outside. The script follows the Service to the pods, and reads the project label of the third fact the same way. |
-
-![Output from a real lab run: Fetch the supplied files and look at the cluster by hand](img/VM-4-shot-1a.png)
 
 #### 1b. Read the supplied facts_lib.py
 
@@ -545,9 +536,9 @@ Example only.
 | except (OSError, ValueError, KeyError) | Turns a network error, a bad file or a missing field into one message and exit code 2. | A clear message and a fixed exit code tell a person or a pipeline what went wrong. |
 | wc -l evidence.py | Counts all the lines of the finished file. | The count should match the expected output. |
 
-#### 2d. Download the catalog, build the evidence and read the top scores
+#### 2d. Download the catalog and build the evidence
 
-You will now download the KEV catalog, build evidence.json, and print the five CVE IDs with the highest EPSS score.
+You will now download the KEV catalog, and build evidence.json.
 
 ```bash
 cd /workspace/vm-4
@@ -555,7 +546,6 @@ CATALOG_URL=https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulne
 curl -fsS -o catalog.json "$CATALOG_URL"
 jq '{catalogVersion, dateReleased, count, entries: (.vulnerabilities | length)}' catalog.json
 python3 evidence.py catalog.json evidence.json nginx.json httpd.json
-jq -r 'to_entries | sort_by(-(.value.likelihood // 0)) | .[:5][] | [.key, .value.likelihood, .value.exploited] | @tsv' evidence.json
 ```
 
 **Expected output:**
@@ -569,8 +559,6 @@ Example only. Your catalog version, counts and scores will differ.
   "entries": <n>
 }
 wrote evidence.json: <n> CVEs, <n> in the KEV catalog, <n> with an EPSS score
-CVE-<id>	<score between 0 and 1>	<true or false>
-(five lines like that)
 ```
 
 | Part | What it does | Why you run it |
@@ -578,9 +566,6 @@ CVE-<id>	<score between 0 and 1>	<true or false>
 | curl -fsS -o catalog.json | Downloads the catalog. -f makes curl fail on an HTTP error, -s hides the progress bar, -S still shows an error. | A failed download must stop the step, not leave an error page in the file. |
 | jq '{catalogVersion, dateReleased, count, entries: ...}' | Prints the catalog version, its release date, the count it states and the entries it holds. | Lets you see that the catalog is current and that the count equals the entries. |
 | python3 evidence.py catalog.json evidence.json ... | Looks up every CVE ID of both reports in the catalog and in the EPSS service, and writes evidence.json. | This is the exploit evidence the plan joins to each finding. |
-| jq -r 'to_entries \| sort_by(...)' evidence.json | Prints the five CVE IDs with the highest EPSS score, with their KEV flag. | Shows what the data looks like: most flaws score low, and a few score high. |
-
-![Output from a real lab run: Download the catalog, build the evidence and read the top scores](img/VM-4-shot-2d.png)
 
 > **NOTE:** Few matches, or even zero, in the KEV catalog can be a valid answer, but only because the catalog loaded and its count matched. On the lab images a handful of CVEs (about eight) are in the catalog. Test 4 breaks the catalog on purpose.
 
@@ -598,7 +583,7 @@ CVE-<id>	<score between 0 and 1>	<true or false>
 
 **Learning point: Building plan.json joins the findings, the facts and the evidence into one tier and one action for each finding on each workload.**
 
-- Write the decision rules and the script that joins findings, facts and evidence; rank.py from the previous module reads the reports.
+- Write the decision rules yourself, then paste the script that joins findings, facts and evidence; rank.py from the previous module reads the reports.
 - A known-exploited finding is P1 on any running workload and is never suppressed, and inside a tier the highest EPSS score comes first.
 
 What this step adds (thick lines and outlines are new):
@@ -607,13 +592,16 @@ What this step adds (thick lines and outlines are new):
 
 - The prioritize script joins the findings, the facts and the evidence into plan.json in your folder.
 
-#### 3a. Create tiers.py
+#### 3a. Your turn: write the tier rules
 
-You will now paste this block into lab shell to create the file tiers.py in the same folder.
+You will now write tiers.py with two rules missing on purpose: the known-exploited rule and the critical-project rule.
+
+- action is already complete.
+- Run the block once so the file exists, then add the two rules yourself from the note below this block by running the same command again with your own lines.
 
 Look for these as you read:
 
-- tier is the table in section 2.2 written as code. The KEV check comes first: a known-exploited finding is P1 on a running workload and P3 on one that is switched off.
+- tier is the table in section 2.2 written as code. This starter holds the not-running rule and the exposed rule.
 - Without exploit evidence, a workload that is not running is P4, a serious finding that is exposed is P1, a serious finding in a critical project is P2, and anything else is P3.
 - action turns a workload, a fix and the KEV flag into a decision: suppress, fix or exception. A known-exploited finding is never suppressed.
 
@@ -626,15 +614,11 @@ SERIOUS = ("CRITICAL", "HIGH")
 
 
 def tier(finding, workload):
-    if finding["exploited"]:
-        return "P1" if workload["running"] else "P3"
     serious = finding["severity"] in SERIOUS
     if not workload["running"]:
         return "P4"
     if serious and workload["exposed"]:
         return "P1"
-    if serious and workload["critical"]:
-        return "P2"
     return "P3"
 
 
@@ -650,7 +634,7 @@ wc -l tiers.py
 
 ```
 Example only.
-22 tiers.py
+18 tiers.py
 ```
 
 | Part | What it does | Why you run it |
@@ -663,7 +647,30 @@ Example only.
 | tier(finding, workload) | Without evidence: not running is P4, serious and exposed is P1, serious in a critical project is P2, anything else is P3. | This function is the table in section 2.2 written as code, so you can read the rule and test it. |
 | action(finding, workload) | Not running and not known-exploited means suppress. Otherwise a fix means fix, and no fix means exception. | Turns a tier and a fix into a decision, which Steps 4 and 5 then carry out. |
 
-#### 3b. Create prioritize.py
+#### 3b. Check your tier rules on six known cases
+
+You will now run tier on six findings whose right tier is known.
+
+- The command prints True when all six are right, then the six tiers it produced.
+- Until you add the two rules it prints False.
+
+```bash
+cd /workspace/vm-4 && python3 -c 'import tiers; f = {"severity": "LOW", "exploited": False, "fix": "1"}; w = {"running": True, "exposed": False, "critical": False}; cases = [({**f, "exploited": True}, w, "P1"), ({**f, "exploited": True}, {**w, "running": False}, "P3"), ({**f, "severity": "HIGH"}, {**w, "exposed": True}, "P1"), ({**f, "severity": "HIGH"}, {**w, "critical": True}, "P2"), ({**f, "severity": "HIGH"}, {**w, "running": False}, "P4"), (f, {**w, "exposed": True}, "P3")]; got = [tiers.tier(a, b) for a, b, _ in cases]; print(got == [c for _, _, c in cases], got)'
+```
+
+**Expected output:**
+
+```
+Example only.
+True ['P1', 'P3', 'P1', 'P2', 'P4', 'P3']
+```
+
+| Part | What it does | Why you run it |
+| --- | --- | --- |
+| cases = [...] | Six findings on workloads, each with the tier the rules in section 2.2 give: a known-exploited one on a running and a stopped workload, a serious one that is exposed, one in a critical project, one on a stopped workload, and a low one that is exposed. | A known right answer for each rule shows which rule your tier is missing. |
+| print(got == [...], got) | Prints True when every tier matches, then the tiers your function returned. | A check that proves your rules before the plan uses them. |
+
+#### 3c. Create prioritize.py
 
 You will now paste this block into lab shell to create prioritize.py in the same folder, and you run it in the next block.
 
@@ -735,9 +742,9 @@ Example only.
 | sorted(rows, key=...) | Orders by tier, then by EPSS descending (no score counts as 0), then by CVSS score, CVE ID and workload. | Puts the flaws most likely to be exploited first inside each tier. |
 | scans = dict(pair.split("=", 1) ...) | Reads arguments of the form IMAGE=report.json. | Lets you pair each image name with its report on the command line. |
 
-#### 3c. Build the plan and read it
+#### 3d. Build the plan and read it
 
-You will now build plan.json from the facts, the evidence and the two reports, read the top rows, and count the rows for each tier.
+You will now build plan.json from the facts, the evidence and the two reports, and read the top rows.
 
 ```bash
 cd /workspace/vm-4
@@ -745,7 +752,6 @@ OLD_IMAGE=docker.io/library/nginx:1.16
 BATCH_IMAGE=docker.io/library/httpd:2.4.38
 python3 prioritize.py facts.json evidence.json plan.json "$OLD_IMAGE=nginx.json" "$BATCH_IMAGE=httpd.json"
 jq -r '.[] | [.tier, .action, .workload, .severity, .id, .package, .likelihood] | @tsv' plan.json | head -12
-jq -r '.[] | [.tier, .workload] | @tsv' plan.json | sort | uniq -c
 ```
 
 **Expected output:**
@@ -755,24 +761,18 @@ Example only. Your findings and counts will differ.
 wrote plan.json with <n> rows
 P1	fix	vm-lab/legacy-web	<SEVERITY>	CVE-<id>	<package>	<score>
 (twelve rows in all, the first ones P1 on legacy-web; the action may be fix or exception)
-   <n> P1	vm-lab/legacy-web
-   <n> P3	vm-lab/legacy-web
-   <n> P3	vm-internal/report-svc
-   <n> P4	vm-batch/batch-old
-(rows for other tiers and workloads may also appear, such as P1 on report-svc or P3 on batch-old, when a CVE is in the KEV catalog)
 ```
 
 | Part | What it does | Why you run it |
 | --- | --- | --- |
 | prioritize.py facts.json evidence.json plan.json ... | Writes plan.json. | Builds the plan from the facts, the evidence and the two reports. |
 | jq -r ... @tsv \| head -12 | Prints the first twelve rows: tier, action, workload, severity, ID, package, EPSS score. | Shows the top of the plan, where the urgent rows should be. |
-| jq -r '.[] \| [.tier, .workload]' \| sort \| uniq -c | Counts the rows for each tier and workload, so you can see every tier even though the plan is long. | Shows the tiers the rules produce, which shows they separate the workloads. |
 
-![Output from a real lab run: Build the plan and read it](img/VM-4-shot-3c.png)
+> **NOTE:** Your tier must give a known-exploited finding P1 on a running workload and P3 on a stopped one, tested first, and give a serious finding in a critical project P2. Use the two rules already in the starter as your pattern. Reference, only after you have tried: the first lines of tier are if finding["exploited"]: return "P1" if workload["running"] else "P3", and the extra rule goes after the exposed rule: if serious and workload["critical"]: return "P2".
 
-> **YOUR TURN:** Save the two files, then build and read the plan.
+> **YOUR TURN:** Write tiers.py yourself, run the check, save prioritize.py, then build and read the plan.
 
-> **CHECKPOINT:** The first rows are P1 for legacy-web. The count shows P1 and P3 rows for legacy-web, P3 rows for report-svc, and P4 rows for batch-old (a P1 row on report-svc, or a P3 row on batch-old, is a known-exploited finding).
+> **CHECKPOINT:** The tier check prints True, plan.json is written and the first rows are P1 for legacy-web.
 
 > **TAKEAWAY:** The same flaw gets a different priority on each workload, because the rules read facts about where it runs.
 
@@ -986,9 +986,9 @@ Example only.
 
 ![The Gitea pull request that moves the base image, open and not merged](img/VM-4-gitea-pr.png)
 
-#### 5c. Scan the new base image and compare
+#### 5c. Scan the new base image
 
-You will now read the base image from the branch, scan it, check that the finding is gone, and compare the finding counts.
+You will now read the base image from the branch, scan it, and check that the finding is gone.
 
 ```bash
 cd /workspace/vm-4
@@ -999,7 +999,6 @@ echo "$SCAN_BASE"
 trivy image --scanners vuln --quiet --format json --output nginx-new.json "$SCAN_BASE"
 jq --arg id "$FIX_CVE" -e '[.Results[]?.Vulnerabilities[]? | select(.VulnerabilityID == $id)] | length == 0' nginx-new.json
 echo "exit code: $?"
-jq '[.Results[]?.Vulnerabilities[]?] | length' nginx.json nginx-new.json
 ```
 
 **Expected output:**
@@ -1009,9 +1008,6 @@ Example only. Your counts will differ.
 docker.io/library/nginx:1.28-alpine
 true
 exit code: 0
-<n>
-<n>
-(the second count is lower than the first)
 ```
 
 | Part | What it does | Why you run it |
@@ -1020,11 +1016,10 @@ exit code: 0
 | sed -n 's/^FROM //p' ... | Prints the part of the FROM line after FROM, which is the image name. | Reads the base image from the branch itself, so you scan what the branch really names. |
 | trivy image ... nginx-new.json | Scans the new base image. | A fresh scan is the proof, because a pull request is only a proposal. |
 | jq --arg id ... -e '... length == 0' | Prints true and exits 0 only when the finding is absent. -e makes the exit code follow the result. | Turns the check into a yes or no that a script could also use. |
-| jq ... nginx.json nginx-new.json | Prints the number of findings before and after. | Shows how much the change helped overall, not only for one CVE. |
 
 > **YOUR TURN:** Run the three blocks. Do not merge the pull request.
 
-> **CHECKPOINT:** The diff shows one changed FROM line, the pull request is open, and the re-scan prints true with the exit code 0 and a lower second count.
+> **CHECKPOINT:** The diff shows one changed FROM line, the pull request is open, and the re-scan prints true with the exit code 0.
 
 > **TAKEAWAY:** A pull request is a proposal, and only a new scan is proof.
 
@@ -1032,7 +1027,7 @@ exit code: 0
 
 - **CM-3:** The fix is made on its own branch, and a pull request names the finding. Nothing reaches main until someone reviews it.
 - **RA-7:** The pull request proposes the fix that mitigates the risk. A reviewer approves it.
-- **RA-5:** The last block scans the new base image named on the branch and checks that the finding is gone. It prints the finding counts before and after.
+- **RA-5:** The last block scans the new base image named on the branch and checks that the finding is gone.
 
 ## Section 4. Verify It Works
 
@@ -1296,7 +1291,6 @@ Each term is also explained the first time it appears. In Word, hover over an un
 | Finding | One thing a scan reports: a flaw in a package or a bad setting, with a severity. |
 | Gitea | A git server that runs in your lab. It holds the repository vm-app, the pull requests and the issues. |
 | Gitea API | The web address and rules a script or curl uses to read and change Gitea without the web page. |
-| grep | A command that prints only the lines that match a pattern. |
 | Header | A line of extra information sent with a web request, such as a sign-in token. |
 | Heredoc | A way to make a file by pasting its text between a first line such as cat > name <<'EOF' and a last line that says EOF. |
 | HTTP | The protocol that web pages and web APIs use. HTTPS is the encrypted form. |
@@ -1340,7 +1334,6 @@ Each term is also explained the first time it appears. In Word, hover over an un
 | Token | A secret string that proves who you are to a server, used here in place of a password. |
 | Trivy | A free, open source scanner for images, folders and configuration files. |
 | TSV | Tab-separated values: a table written as text, with a tab between columns. |
-| uniq | A command that removes repeated neighbouring lines. |
 | URL | A web address, such as https://example.com/page. |
 | Workload | A program running in the cluster, here a Deployment (the object that keeps a set of identical pods running). |
 | YAML | A plain-text format for settings: lines of name: value, with indentation to show what belongs to what. |

@@ -2,8 +2,8 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 27 of 29 in the recommended order |
-| Timed work | About 76 minutes (58 hands-on, 18 verify) |
+| Sequence | Module 30 of 32 in the recommended order |
+| Timed work | About 72 minutes (54 hands-on, 18 verify) |
 | Standalone start | `lab start cps-5` |
 | Combined start | Continue from the end state of the previous module |
 | Tools | OpenShift Container Platform (project request template), Kyverno (free, open source), oc, jq, python3 |
@@ -398,37 +398,7 @@ What this step adds (thick lines and outlines are new):
 
 - Kyverno generate policies add the default-deny rule to every new gr- namespace, and the quota to ones that bypass the template.
 
-#### 3a. Read the extra permission for Kyverno
-
-You will now read the cluster role that lab start put in your module folder as kyverno-rbac.yaml.
-
-- The role lets the Kyverno service that creates objects manage network policies and quotas, and nothing else.
-
-```bash
-cd /workspace/cps-5
-cat kyverno-rbac.yaml
-```
-
-**Expected output:**
-
-```
-Example only. The file as supplied, 13 lines. The first lines:
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: gr-kyverno-generate
-(the rest of the file)
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| cd ... | Moves into the module folder, where kyverno-rbac.yaml is. | Every block starts in the folder that holds its files, so it works on its own. |
-| cat kyverno-rbac.yaml | Prints the file. | You read what you are about to give Kyverno before you apply it. |
-| rbac.kyverno.io/aggregate-to-background-controller | A label that adds this role's rules to the Kyverno service that creates objects. | The Kyverno service that creates objects needs these rights, and the label is how the extra role reaches it. |
-| networkpolicies, resourcequotas | Only the two kinds the policies generate. No wildcard. | Rights only for what the policies generate, so Kyverno gets nothing it does not need. |
-| verbs | Six named verbs. Creating, reading, changing and removing, so synchronize can repair an object. | Synchronize deletes and updates objects to repair them, so those verbs are needed as well as create. |
-
-#### 3b. Save the default-deny policy
+#### 3a. Save the default-deny policy
 
 You will now make generate-deny.yaml in the folder for this module.
 
@@ -478,7 +448,7 @@ Example only.
 | {{request.object.metadata.name}} | The name of the namespace that triggered the policy. | One policy serves every namespace, so the target namespace is taken from the request. |
 | synchronize: true | If anyone deletes or edits the generated policy, Kyverno puts it back. | Default-deny must never be removed, so it is put back if deleted. |
 
-#### 3c. Save the fallback quota policy
+#### 3b. Save the fallback quota policy
 
 You will now make generate-quota.yaml in the folder for this module.
 
@@ -529,12 +499,13 @@ Example only.
 | synchronize: false | The quota is created once, so a team can ask to change it through a reviewed change. | A team may need a different quota, so it is created once and then left alone. |
 | hard: {pods, requests.memory, limits.memory} | The same caps as the template quota: ten pods and 1Gi and 2Gi of memory. | Both creation paths give the same cap. |
 
-#### 3d. Apply the permission, prove it, then apply the generate policies
+#### 3c. Apply the permission, prove it, then apply the generate policies
 
-You will now apply the extra permission, ask the cluster whether Kyverno now has it, and apply the generate policies.
+You will now read the cluster role lab start put in your folder as kyverno-rbac.yaml, apply it, ask the cluster whether Kyverno now has it, and apply the generate policies.
 
 ```bash
 cd /workspace/cps-5
+cat kyverno-rbac.yaml
 oc apply -f kyverno-rbac.yaml
 sleep 10
 oc auth can-i create networkpolicies --as=system:serviceaccount:kyverno:kyverno-background-controller -n gr-before
@@ -547,6 +518,7 @@ oc get clusterpolicy | grep -e '^NAME' -e '^gr-'
 
 ```
 Example only. The cluster may print a deprecation warning for ClusterPolicy. That is expected.
+(the contents of kyverno-rbac.yaml, 13 lines)
 clusterrole.rbac.authorization.k8s.io/gr-kyverno-generate created
 yes
 clusterpolicy.kyverno.io/gr-generate-deny created (server dry run)
@@ -558,16 +530,20 @@ clusterpolicy.kyverno.io/gr-generate-quota created (server dry run)
 | Part | What it does | Why you run it |
 | --- | --- | --- |
 | cd ... | Moves into the module folder, where the policy files are. | Every block starts in the folder that holds its files, so it works on its own. |
+| cat kyverno-rbac.yaml | Prints the file. | You read what you are about to give Kyverno before you apply it. |
+| rbac.kyverno.io/aggregate-to-background-controller | A label that adds this role's rules to the Kyverno service that creates objects. | The Kyverno service that creates objects needs these rights, and the label is how the extra role reaches it. |
+| networkpolicies, resourcequotas | Only the two kinds the policies generate. No wildcard. | Rights only for what the policies generate, so Kyverno gets nothing it does not need. |
+| verbs | Six named verbs. Creating, reading, changing and removing, so synchronize can repair an object. | Synchronize deletes and updates objects to repair them, so those verbs are needed as well as create. |
 | oc apply -f kyverno-rbac.yaml, sleep 10 | Saves the extra permission first and gives the cluster a few seconds to add it to the Kyverno service. | The permission must exist before the policies, because Kyverno checks it when it accepts them. |
 | oc auth can-i create networkpolicies --as=... | Proves the Kyverno service now has the permission. It must answer yes before you go on. | Proves the permission reached Kyverno. Applying policies without it would fail later without a clear sign. |
 | --dry-run=server | Asks the cluster to check the policy file without saving it. | Catches a mistake in the policy file before it is saved. |
 | oc get clusterpolicy \| grep ... | Lists the policies and whether each is ready. grep keeps the header and only the policies whose names start with gr-, because the cluster may hold policies from other modules. | Shows whether Kyverno accepted both policies. |
 
-![Output from a real lab run: Apply the permission, prove it, then apply the generate policies](img/CPS-5-shot-3d.png)
+![Output from a real lab run: Apply the permission, prove it, then apply the generate policies](img/CPS-5-shot-3c.png)
 
 > **NOTE:** If can-i answers no, the label did not reach Kyverno on this version: do not widen the role, read the Kyverno cluster roles with oc get clusterrole | grep kyverno and use the label they carry.
 
-> **YOUR TURN:** Read kyverno-rbac.yaml, paste the two policy files, then run the last block.
+> **YOUR TURN:** Paste the two policy files, then run the last block, which also prints kyverno-rbac.yaml.
 
 > **CHECKPOINT:** can-i answers yes, and gr-generate-deny and gr-generate-quota are listed.
 
@@ -769,7 +745,6 @@ You will now write the rest of the approved-registry rule: its pattern, the shap
 - In an image pattern, a star matches any run of characters and a bar means or.
 - Type ${REGISTRY_HOST} exactly as written, because the apply block in 4f fills it in.
 - Type this block yourself instead of pasting it, and put your own lines where the comment is.
-- Do not open the folder reference until you have tried and run the check.
 - Type the two lines that start with cd and cat, then press Enter after the cat line.
 - Type your lines using spaces only, with the word pattern: in the same column as pattern: in the no-latest-tag rule.
 - Finish your lines with a line that says EOF alone.
@@ -864,35 +839,11 @@ clusterpolicy.kyverno.io/gr-validate-images created (server dry run)
 
 ![Output from a real lab run: Apply the mutate and validate policies](img/CPS-5-shot-4f.png)
 
-#### 4g. Compare your rule with the reference answer
-
-You will now compare your rule with the finished one that lab start placed in the folder reference, after your own rule has passed the check and been applied.
-
-- A difference is not a fault if your check said 6 of 6: for example, the two names can be in the other order.
-
-```bash
-cd /workspace/cps-5
-diff validate-images.yaml reference/validate-images-answer.yaml && echo same as the reference
-```
-
-**Expected output:**
-
-```
-Example only. If your file is the same, only the last line prints. Otherwise diff prints the lines that differ, marked < for yours and > for the reference.
-same as the reference
-```
-
-| Part | What it does | Why you run it |
-| --- | --- | --- |
-| cd ... | Moves into the module folder, where validate-images.yaml and the folder reference are. | Every block starts in the folder that holds its files, so it works on its own. |
-| diff validate-images.yaml reference/validate-images-answer.yaml | Compares the two files line by line and prints only the lines that differ. It prints nothing and succeeds when they are the same. | Shows what you did differently, so you can judge whether it is a mistake or a different valid choice. |
-| && echo same as the reference | Prints the words only when diff found no difference. | A clear sign that you matched the reference. |
-
 > **TIP:** Run a new validate policy in Audit mode first in a real environment, so you count what it would refuse before it refuses anything. This module checks the registry name only; checking a signature needs a signed image and a key, which the lab does not provide.
 
-> **YOUR TURN:** Paste the first three blocks (mutate-safe-defaults.yaml, validate-host-access.yaml and the first part of validate-images.yaml). Then type the registry allow-list yourself, run the check until it says 6 of 6, apply the policies, and last compare with the reference.
+> **YOUR TURN:** Paste the first three blocks (mutate-safe-defaults.yaml, validate-host-access.yaml and the first part of validate-images.yaml). Then type the registry allow-list yourself, run the check until it says 6 of 6, and apply the policies.
 
-> **CHECKPOINT:** Your check printed 6 of 6, five policies are listed and ready, and you have compared your rule with the reference.
+> **CHECKPOINT:** Your check printed 6 of 6, five policies are listed and ready.
 
 > **TAKEAWAY:** Run the check-registry script until it says 6 of 6 before applying the policy.
 
@@ -1191,7 +1142,6 @@ Each term is also explained the first time it appears. In Word, hover over an un
 | Cosign | A tool that signs container images and checks their signatures. |
 | Default-deny | A network policy that selects every pod and lists no allowed traffic, so everything is blocked until another rule allows it. |
 | Deployment | A cluster object that keeps a set number of copies of a program running and replaces them when you change it. |
-| diff | A command that shows the differences between two files. |
 | Drift | When the real system no longer matches what the files say it should be. |
 | First-try pass | A workload that is accepted and meets the baseline on the first apply, with no edits by a person. |
 | Generate policy | A Kyverno policy that creates other objects, for example a network policy in each new namespace. With synchronize on it also puts the object back if someone deletes it. |

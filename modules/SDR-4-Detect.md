@@ -2,7 +2,7 @@
 
 | Item | Detail |
 | --- | --- |
-| Sequence | Module 19 of 29 in the recommended order |
+| Sequence | Module 21 of 32 in the recommended order |
 | Timed work | About 77 minutes (56 hands-on, 21 verify) |
 | Standalone start | `lab start sdr-4` |
 | Combined start | Continue from the end state of the previous module |

@@ -50,7 +50,7 @@ MODULE = {
     "controls": ["SA-8", "CM-7", "AU-12"],
     "mentions": [],
     "unit_values_ok": ["60 seconds", "60 second", "15 seconds"],
-    "minutes": {"hands_on": 40, "verify": 17},
+    "minutes": {"hands_on": 38, "verify": 17},
     "tools": ["OpenShift Container Platform", "Kyverno (free, open source)", "oc", "jq", "python3"],
     "tool_why": True,
     "hide_draft": True,
@@ -74,8 +74,7 @@ MODULE = {
                 1: "The lab starts with a project, four test pod files in your arc folder and the Kyverno policy as an Audit file and an Enforce file. No policy is applied to the cluster yet.",
                 2: "You write the test script in your arc folder in lab shell, and the review gate reads it before anything runs.",
                 3: "For each condition you switch the policy in the cluster, send test requests from lab shell to the cluster, add 20 load pods to the project, and save what each mode refused and recorded in result files in your arc folder.",
-                4: "The comparison script reads the result files in your arc folder and prints the table of outcomes and records on your screen.",
-                5: "You run a jq filter over the same result files, which prints the name of the condition that meets the requirement on your screen.",
+                4: "The comparison script reads the result files in your arc folder and prints the table of outcomes and records on your screen. A jq filter over the same files then prints the name of the condition that meets the requirement.",
             },
             "zones": [
                 {"id": "cluster", "icon": "aws/group-AWS-Cloud", "label": "Your cluster (your OpenShift cluster, in AWS)", "kind": "boundary"},
@@ -92,7 +91,7 @@ MODULE = {
                 {"id": "gate", "title": "Review gate", "icon": "brands/python", "sub": "Python script review_gate.py", "zone": "shell", "kind": "warn", "s": 2},
                 {"id": "res", "title": "Result files", "icon": "brands/json", "sub": "JSON files, one per condition", "zone": "shell", "s": 3},
                 {"id": "cmp", "title": "Comparison table", "sub": "Outcomes and records", "zone": "shell", "kind": "ok", "s": 4},
-                {"id": "req", "title": "Requirement check", "sub": "A jq filter you can run again", "zone": "shell", "kind": "ok", "s": 5},
+                {"id": "req", "title": "Requirement check", "sub": "A jq filter you can run again", "zone": "shell", "kind": "ok", "s": 4},
             ],
             "edges": [
                 {"a": "cases", "b": "pol", "label": "Dry runs checked by", "s": 1},
@@ -101,7 +100,7 @@ MODULE = {
                 {"a": "load", "b": "pol", "label": "Recorded or refused", "s": 3},
                 {"a": "timer", "b": "res", "label": "Writes", "s": 3},
                 {"a": "res", "b": "cmp", "label": "Read", "kind": "ok", "s": 4},
-                {"a": "res", "b": "req", "label": "Filtered", "kind": "ok", "s": 5},
+                {"a": "res", "b": "req", "label": "Filtered", "kind": "ok", "s": 4},
             ],
             "why_built": (
                 "You work in lab shell on your laptop, and the tool you are choosing a mode for runs on your own cluster. "
@@ -154,7 +153,7 @@ MODULE = {
             "plain": "Design choices follow stated engineering principles and are made before the system is built or changed.",
             "source": "NIST",
             "tool": "The test script, the review gate, the comparison script and a jq filter over the result files. Explained in section 2.1.",
-            "covered": "Section 3, Steps 2 to 4: write and gate the test script, collect three conditions, read back the table. Section 3, Step 5: write the criterion as a check. Section 4, Test 2: the comparison refuses incomplete data.",
+            "covered": "Section 3, Steps 2 to 4: write and gate the test script, collect three conditions, read back the table and write the criterion as a check. Section 4, Test 2: the comparison refuses incomplete data.",
             "cite": [
                 {"file": NIST, "quote": "Apply the following systems security and privacy engineering principles in the specification, design, development, implementation, and modification of the system and system components"},
             ],
@@ -189,7 +188,7 @@ MODULE = {
             "evidence": "The criteria, the test results for each option under the same test, and the check that applies the criteria.",
             "sufficient": "Each option is tested the same way, including a condition with nothing applied as a baseline. NIST leaves the principles organization-defined. The lab chooses a simple one: test each option under the same test before choosing.",
             "tieoff": "Someone owns the criteria and reruns the test when the tool or the cluster changes.",
-            "tool": "The test script, the review gate and the comparison (Steps 2 to 4), and the criterion check in Step 5.",
+            "tool": "The test script, the review gate, the comparison and the criterion check (Steps 2 to 4).",
         },
         {
             "control": "CM-7 Least Functionality",
@@ -426,14 +425,15 @@ MODULE = {
             "checkpoint": "The careless script prints six FAIL lines, review gate: FAILED and exit code 1. Three files exist in the results folder: none.json, audit.json and enforce.json. The log shows snapshot saved three times.",
         },
         {
-            "title": "Read back what each mode refused and recorded",
-            "learn": "Printing the comparison table shows, side by side, which of the four requests each mode refused and which records it left behind.",
-            "takeaway": "Only Enforce refuses a rule-breaking request; Audit lets it through and records it.",
+            "title": "Read back the table, then turn it into a check on one requirement",
+            "learn": "Printing the comparison table shows which of the four requests each mode refused and which records it left. Writing the requirement as a jq filter over the same files names the condition that meets it, and the filter can be rerun whenever the tool or the cluster changes.",
+            "takeaway": "Only Enforce refuses a rule-breaking request, and a decision written as a runnable check does not have to be argued again.",
             "controls": [
                 {"id": "CM-7 Least Functionality", "how": "The outcome rows show which of the four requests each mode refused, and only Enforce refuses any."},
                 {"id": "AU-12 Audit Record Generation", "how": "The record rows show that Audit and Enforce each left reports or events and that the none condition left none. Verify checks the Audit count."},
+                {"id": "SA-8 Security and Privacy Engineering Principles", "how": "The jq filter writes the requirement down, so the choice follows from written criteria that anyone can rerun."},
             ],
-            "why": "The comparison script reads the three result files and prints, for each condition, which requests were allowed or denied and which records exist. The record counts are checked in Verify.",
+            "why": "The comparison script reads the three result files and prints, for each condition, which requests were allowed or denied and which records exist. A decision that cannot be rechecked will be argued again, so the filter then asks one question of the same files: which condition refuses the root request and also leaves a record?",
             "blocks": [
                 {
                     "code": (
@@ -445,20 +445,7 @@ MODULE = {
                     "lines": [
                         ("compare.py", "Prints one column per condition: what each of the four requests did and what was recorded. It stops with an error if a result is missing or too small.", "Reads back what each mode refused and recorded, which is the evidence that Enforce restricts and Audit only records."),
                     ],
-                }
-            ],
-            "note": "Read only the request outcome rows and the record rows. Each of the 20 load pods breaks three rules, so in Audit mode expect three failed results per pod.",
-            "checkpoint": "The table has three columns. In Enforce the load pods created is 0 and the root request is denied. In none the root request is allowed. The Audit count is checked in Verify.",
-        },
-        {
-            "title": "Turn the table into a check on one requirement",
-            "learn": "Writing the requirement as a jq filter over the result files names the condition that meets it, and the filter can be rerun whenever the tool or the cluster changes.",
-            "takeaway": "A decision written as a runnable check does not have to be argued again.",
-            "controls": [
-                {"id": "SA-8 Security and Privacy Engineering Principles", "how": "The jq filter writes the requirement down, so the choice follows from written criteria that anyone can rerun."},
-            ],
-            "why": "A decision that cannot be rechecked will be argued again. The filter asks one question of the result files: which condition refuses the root request and also leaves a record?",
-            "blocks": [
+                },
                 {
                     "code": (
                         f"jq -r 'select(.outcomes.root == \"denied\" and (.report_fail_results + .policy_events + .failed_create_events) > 0) | .mode' {ARC}/results/\"*.json\n"
@@ -474,8 +461,9 @@ MODULE = {
                     ],
                 }
             ],
+            "note": "Read only the request outcome rows and the record rows. Each of the 20 load pods breaks three rules, so in Audit mode expect three failed results per pod.",
             "tip": "Change the requirement and rerun the first line, for example to require that the compliant case is still allowed or that no load pod is created.",
-            "checkpoint": "Only enforce is printed by the first line.",
+            "checkpoint": "The table has three columns. In Enforce the load pods created is 0 and the root request is denied. In none the root request is allowed. The Audit count is checked in Verify. Only enforce is printed by the first line of the filter block.",
         },
     ],
     "verify": [

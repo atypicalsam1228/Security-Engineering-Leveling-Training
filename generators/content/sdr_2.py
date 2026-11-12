@@ -22,7 +22,7 @@ MODULE = {
         "5 minute", "10 minute", "5 minutes", "10 minutes", "15 minutes", "20 minutes", "24 minutes", "25 minutes", "28 minutes", "30 minutes",
         "3 hours", "1 hour", "1 minute", "2 minutes", "60 seconds",
     ],
-    "minutes": {"hands_on": 42, "verify": 18},
+    "minutes": {"hands_on": 38, "verify": 18},
     "tools": ["Loki and Grafana (free, open source)", "Mattermost (free, open source)", "OpenShift Container Platform", "oc", "curl", "jq", "python3"],
     "tool_why": True,
     "hide_draft": True,
@@ -39,8 +39,7 @@ MODULE = {
                 1: "You copy the runbook from the cluster into your lab shell with oc, and print the four alerts that were posted to the alert channel in Mattermost.",
                 2: "The first triage command searches Loki for the audit record behind a privilege-change alert, and you post your decision to the alert channel.",
                 3: "The second command searches the sign-in records in Loki and compares failures with later successes, and you post your decision to the alert channel.",
-                4: "The third command pairs a runtime shell record in Loki with the audit record that names the person.",
-                5: "The gap check searches Loki for spans with no records, and the path check in Verify walks every hop from the log collector to the alert channel and reads how old the newest record of each type is.",
+                4: "The third command pairs a runtime shell record in Loki with the audit record that names the person. Later, in Verify, the path check walks every hop from the log collector to the alert channel and reads how old the newest record of each type is.",
             },
             "zones": [
                 {"id": "cluster", "icon": "aws/group-AWS-Cloud", "label": "Your cluster (your OpenShift cluster, in AWS)", "kind": "boundary"},
@@ -68,7 +67,7 @@ MODULE = {
                 {"a": "book", "b": "tri", "label": "Copied into", "kind": "warn", "s": 1},
                 {"a": "tri", "b": "loki", "label": "Searches", "kind": "warn", "s": 2},
                 {"a": "tri", "b": "chan", "label": "Decision posted to", "kind": "ok", "s": 2},
-                {"a": "tri", "b": "col", "label": "Path check reads pods of", "kind": "warn", "flat": True, "beside": True, "s": 5},
+                {"a": "tri", "b": "col", "label": "Path check reads pods of", "kind": "warn", "flat": True, "beside": True, "s": 4},
             ],
             "why_built": (
                 "You work in lab shell on your computer, the same tools container you opened in the foundation module, and everything you search runs inside your cluster (a group of servers that work together as one system). "
@@ -152,7 +151,7 @@ MODULE = {
             "plain": "When the logging process itself fails, alert named people within a set time.",
             "source": "NIST",
             "tool": "The path check and the gap check in triage.py, which read Loki, Grafana and Mattermost. Explained in section 2.3.",
-            "covered": "Section 3, Step 5, and Section 4, Tests 1 and 2: what a late log type and a gap in a log type look like, and the rule to escalate.",
+            "covered": "Section 4, Tests 1 and 2: what a late log type and a gap in a log type look like, and the rule to escalate.",
             "cite": [
                 {"file": NIST, "quote": "Alert [Assignment: organization-defined personnel or roles] within [Assignment: organization-defined time period] in the event of an audit logging process failure"},
             ],
@@ -462,34 +461,6 @@ MODULE = {
             "action": "Run the first command and read both searches it prints. Decide and post.",
             "checkpoint": "Both an audit record and a Falco record are found, the person is on the approved list, and the post prints HTTP 200.",
         },
-        {
-            "title": "Find the missing logs",
-            "learn": "The gap check lists a span of 28 minutes with no audit records, which shows that an empty search can mean the logs were never there.",
-            "takeaway": "An empty search proves nothing until you know the logs were there.",
-            "controls": [
-                {"id": 'AU-5 Response to Audit Logging Process Failures', "how": 'The gap check lists spans with no records, and the path check in Verify tests every hop, so a failure of the logging process is noticed. The lab rule is to tell the platform team in the alert channel.'},
-            ],
-            "why": "Before you trust any empty result you must know the logs were there and the telemetry path (the route a log takes to where you search it) was healthy. The gap check lists spans with no records, and the path check (run in Verify) looks at every hop and reads the age of the newest record of each log type. Use the gap and path checks whenever a search finds less than the alert says it should.",
-            "blocks": [
-                {
-                    "code": (
-                        "cd /workspace/sdr-2\n"
-                        "python3 triage.py gaps"
-                    ),
-                    "label": 'List the spans with no records',
-                    "intro": 'You will now ask triage.py for every span with no records.',
-                    "expect": 'Example only. Times differ in your lab, and other log types may be listed too.\nGAP     audit          <start> to <end>  (28 minutes with no record)\n(and an ok line for each log type without a gap)',
-                    "lines": [
-                        ("cd /workspace/sdr-2", "Moves into the module folder from step 1.", "triage.py is in that folder."),
-                        ("triage.py gaps","Prints every span of more than 10 minutes with no record, for each log type.", "An empty search only means something if the logs existed. This lists where they did not."),
-                    ],
-                },
-
-            ],
-            "note": "The late log type in this exercise is the infrastructure log, which the path check in Verify names. The rule for a late log is to carry on with the triage, note the lateness in your decision line, and tell the platform team.",
-            "action": "Run the command. Find the span that has no audit records.",
-            "checkpoint": "The gap check lists a span of 28 minutes with no audit record.",
-        },
     ],
     "verify": [
         {
@@ -498,7 +469,7 @@ MODULE = {
             "controls": [
                 {"id": 'AU-5 Response to Audit Logging Process Failures', "how": 'The path check reads each hop and the age of the newest record of each log type, and it marks the late one. Finding the late infrastructure log is the detection that must come before anyone can be alerted.'},
             ],
-            "why": "You checked your three decisions against the CHECK lines in Steps 2 to 4. A healthy path would print no LATE line. This exercise has one late log type, and finding it is the point.",
+            "why": "Before you trust any empty result you must know the logs were there and the telemetry path (the route a log takes to where you search it) was healthy. You checked your three decisions against the CHECK lines in Steps 2 to 4. A healthy path would print no LATE line. This exercise has one late log type, and finding it is the point. The rule for a late log is to carry on with the triage, note the lateness in your decision line, and tell the platform team.",
             "code": (
                 "cd /workspace/sdr-2\n"
                 "python3 triage.py path"

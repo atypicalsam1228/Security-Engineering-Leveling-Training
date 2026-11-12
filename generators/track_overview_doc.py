@@ -34,7 +34,7 @@ PHASES = [
     ("Vulnerability Management", ["VM-2", "VM-3", "VM-4", "VM-5"], "Why this order: you scan and hand off findings, track fixes, prioritize by context, then gate delivery on risk."),
     ("Security Data and Incident Response", ["SDR-2", "SDR-3", "SDR-4", "SDR-5"], "Why this order: you triage an alert from a runbook, investigate and tune, build detections, then manage them as code."),
     ("Cloud and Platform Security", ["CPS-2", "CPS-3", "CPS-4", "CPS-5"], "Why this order: you apply a baseline, limit permissions, secure a whole workload, then build guardrails developers inherit."),
-    ("AI Development", ["AID-2", "AID-3", "AID-4", "AID-5"], "Why this order: you check AI-written scripts, put AI-assisted automation under review, build a constrained agent, then set the safe-adoption pattern. No model account or key is needed; a stand-in model gives scripted answers."),
+    ("AI Development", ["AID-2", "AID-3", "AID-4", "AID-5"], "Why this order: AID-2 is optional; you check AI-written scripts, put AI-assisted automation under review, build a constrained agent, then set the safe-adoption pattern. No model account or key is needed; a stand-in model gives scripted answers."),
     ("Architecture and Design", ["ARC-2", "ARC-3", "ARC-4", "ARC-5"], "Why this order: you trace the security stack, choose an admission mode, test two designs, then verify a reference architecture."),
     ("Infrastructure as Code", ["IAC-1", "IAC-2", "IAC-3"], "Why this order: you run a supplied baseline as code with Terraform and Ansible, then deliver your own change through a review gate, then choose between the two tools by evidence. This dimension has three modules, numbered in sequence."),
 ]
