@@ -1,10 +1,12 @@
-# Engineering Leveling Training
+# Security Engineering Leveling Training
 
 A stand-alone, hands-on training that teaches the technical skills of a security engineer as the work grows from guided tasks to team-level design. Learners work on their own real OpenShift single-node cluster in AWS, run each exercise with real tools, then run a test that shows it works and a test that shows the failure when it is removed.
 
 STATUS: DRAFT. All 29 modules are written, validated and rendered, and the lab command-line tool passes its unit tests. Nothing has been run against a live cluster or on AWS yet. Commands follow vendor documentation and are validated (`--dry-run=server`, `oc explain`, `--help`) before they are applied, but expect field-name corrections on the first live run.
 
 `ENGINEERING-TRACK.md` (and `ENGINEERING-TRACK.docx`, the same content) is the learner overview: audience, goal, suggested order, and each module with its steps and tools. This README covers setup, the lab, cost, layout and the build tools.
+
+See [MODULES.md](MODULES.md) for what each of the 29 modules covers and why.
 
 ## Before you start (checklist)
 
