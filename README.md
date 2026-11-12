@@ -6,6 +6,18 @@ STATUS: DRAFT. All 29 modules are written, validated and rendered, and the lab c
 
 `ENGINEERING-TRACK.md` (and `ENGINEERING-TRACK.docx`, the same content) is the learner overview: audience, goal, suggested order, and each module with its steps and tools. This README covers setup, the lab, cost, layout and the build tools.
 
+## Before you start (checklist)
+
+These are personal to you and are not in this repository. Have all of them before you run `lab up`.
+
+- [ ] **AWS account you may spend in**, with credentials in your environment (for example `AWS_PROFILE`). Use a lab account, not production. A full run is about $18 (an estimate).
+- [ ] **AWS permissions** to create VPCs, EC2, KMS, S3, IAM, SNS, budgets and Route 53 records.
+- [ ] **EC2 quota** for the cluster instance (default `m6i.4xlarge`, 16 vCPU) in your region. A new account may need a Service Quotas increase for "Running On-Demand Standard instances".
+- [ ] **Red Hat pull secret.** Sign in with a free Red Hat account, download it from the Red Hat console, and save it as a file in your lab workspace (for example `~/lab-workspace/pull-secret.json`). It is tied to you; do not share or commit it.
+- [ ] **A public Route 53 hosted zone** in the same AWS account, for a domain you own (or a subdomain delegated to Route 53). A domain costs money and DNS delegation can take time, so set this up first.
+- [ ] **Python 3.10 or newer** and **podman or docker**. On Windows, use PowerShell or Windows Terminal, not Git Bash.
+- [ ] **Terraform variables** `TF_VAR_lab_id`, `TF_VAR_region`, `TF_VAR_destroy_after`, `TF_VAR_alert_email` (see `terraform/README.md`). To use `terraform/bastion/provision-learner.ps1`, also set `LAB_ALERT_EMAIL`, `LAB_BASE_DOMAIN` and `LAB_AWS_ACCOUNT_ID`.
+
 ## 1. Setup
 
 ### Requirements
