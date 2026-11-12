@@ -1,0 +1,8 @@
+namespace: arc-ref
+flows:
+  - from: web
+    to: api
+    port: 70000
+  - from: api
+    to: api
+    port: 8080

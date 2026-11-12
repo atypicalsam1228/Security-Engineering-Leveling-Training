@@ -1,0 +1,4 @@
+// Starting point: events pass through unchanged.
+loki.process "label" {
+  forward_to = [loki.write.siem.receiver]
+}

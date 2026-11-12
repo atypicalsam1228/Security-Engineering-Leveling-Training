@@ -1,0 +1,51 @@
+# GRC-5: monitor-reader may only read the team namespace (demo). monitor-pvc keeps results.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: monitor-reader
+  namespace: build
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: monitor-read
+  namespace: demo
+rules:
+  - apiGroups: ["wgpolicyk8s.io"]
+    resources: ["policyreports"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["rolebindings"]
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: monitor-read
+  namespace: demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: monitor-read
+subjects:
+  - kind: ServiceAccount
+    name: monitor-reader
+    namespace: build
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: monitor-pvc
+  namespace: build
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

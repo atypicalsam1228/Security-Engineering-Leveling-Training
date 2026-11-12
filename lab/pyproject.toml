@@ -1,0 +1,25 @@
+[project]
+name = "lab"
+version = "0.1.0"
+description = "Command-line helper for the hands-on training lab"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+lab = "labcli.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["labcli"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["labcli"]
+omit = ["labcli/__main__.py"]

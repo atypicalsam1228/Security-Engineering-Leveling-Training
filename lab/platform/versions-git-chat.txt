@@ -1,0 +1,5 @@
+# component | version | where verified | date
+Gitea | 28.3.0 (image docker.gitea.com/gitea:28.3.0-rootless) | GitHub releases API (v28.3.0, not pre-release); docker.io/gitea/gitea tags API lists 28.3.0-rootless; registry docker.gitea.com /v2 manifest answered HTTP 200 | 2026-11-02
+Mattermost Team Edition | 11.11.3 (image docker.io/mattermost/mattermost-team-edition:11.11.3) | Docker Hub tags API lists 11.11.3; GitHub releases API v11.11.3 not pre-release | 2026-11-02
+PostgreSQL for Mattermost | 16 (image quay.io/sclorg/postgresql-16-c9s:20261027) | Quay tag API lists 20261027 (same time as latest) | 2026-11-02
+Keycloak | 26.8.1 (image quay.io/keycloak/keycloak:26.8.1) | LAB-CONTRACT.md pin; Quay tag API lists 26.8.1; registry /v2 manifest answered HTTP 200 | 2026-11-02

@@ -1,0 +1,33 @@
+#!/bin/bash
+set -euo pipefail
+exec > >(tee -a /var/log/learner-bootstrap.log) 2>&1
+
+# Package servers can be slow to answer right after boot: retry for about 10 minutes.
+retry() {
+  local n=0
+  until "$@"; do
+    n=$((n + 1))
+    [ "$n" -ge 40 ] && { echo "giving up: $*"; return 1; }
+    sleep 15
+  done
+}
+
+# Learner accounts first, so a package problem never leaves the bastion without them.
+%{ for user, key in learners ~}
+useradd -m -s /bin/bash ${user}
+install -d -m 700 -o ${user} -g ${user} /home/${user}/.ssh
+echo '${key}' > /home/${user}/.ssh/authorized_keys
+chmod 600 /home/${user}/.ssh/authorized_keys
+chown ${user}:${user} /home/${user}/.ssh/authorized_keys
+%{ endfor ~}
+
+# The lab tool needs Python 3.10 or newer; RHEL 9's default is 3.9.
+retry dnf install -y podman git python3.11 python3.11-pip jq unzip shadow-utils
+sysctl -w user.max_user_namespaces=28633
+echo "user.max_user_namespaces=28633" > /etc/sysctl.d/99-userns.conf
+%{ for user, key in learners ~}
+# Rootless podman needs sub-ID ranges and a user session that survives logout.
+grep -q '^${user}:' /etc/subuid || usermod --add-subuids 100000-165535 --add-subgids 100000-165535 ${user}
+loginctl enable-linger ${user}
+%{ endfor ~}
+touch /var/lib/learner-bootstrap.done

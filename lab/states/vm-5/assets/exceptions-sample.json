@@ -1,0 +1,32 @@
+{
+  "exceptions": [
+    {
+      "id": "CVE-2099-2002",
+      "package": "libbravo",
+      "reason": "No fix is published and the library is not reachable from the network port",
+      "owner": "platform",
+      "expires": "2026-11-20"
+    },
+    {
+      "id": "CVE-2099-2003",
+      "package": "libcharlie",
+      "reason": "No fix is published, waiting for the vendor",
+      "owner": "platform",
+      "expires": "2026-10-20"
+    },
+    {
+      "id": "CVE-2099-2008",
+      "package": "libhotel",
+      "reason": "",
+      "owner": "platform",
+      "expires": "2026-11-10"
+    },
+    {
+      "id": "CVE-2099-2009",
+      "package": "libindia",
+      "reason": "Fix scheduled for the next release",
+      "owner": "platform",
+      "expires": "2027-05-01"
+    }
+  ]
+}

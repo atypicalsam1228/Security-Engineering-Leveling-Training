@@ -1,0 +1,23 @@
+# The workload the scans look at. The old image is public and has published flaws.
+# sleep keeps the container alive without starting the web server.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legacy-web
+  namespace: vm-lab
+  labels:
+    app: legacy-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: legacy-web
+  template:
+    metadata:
+      labels:
+        app: legacy-web
+    spec:
+      containers:
+        - name: web
+          image: docker.io/library/nginx:1.16
+          command: ["sleep", "3600"]

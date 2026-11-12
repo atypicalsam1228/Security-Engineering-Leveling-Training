@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: control-monitor
+  namespace: build
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: monitor-reader
+          restartPolicy: Never
+          initContainers:
+            - name: get-oc
+              image: quay.io/openshift/origin-cli:4.22.0
+              command: ["cp", "/usr/bin/oc", "/oc-bin/oc"]
+              volumeMounts:
+                - {name: oc-bin, mountPath: /oc-bin}
+          containers:
+            - name: monitor
+              image: registry.access.redhat.com/ubi9/python-312:1
+              env:
+                - {name: PATH, value: "/oc-bin:/opt/app-root/bin:/usr/bin:/bin"}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  TS=$(date -u +%Y%m%dT%H%M%SZ)
+                  cd /scripts
+                  python3 convert.py demo scope.json > /out/results-$TS.json
+                  python3 measure.py /out/results-$TS.json scope.json > /out/measure-$TS.json
+                  python3 drift.py compare demo /baseline/baseline.json > /out/drift-$TS.json
+                  cat /out/measure-$TS.json /out/drift-$TS.json
+              volumeMounts:
+                - {name: scripts, mountPath: /scripts, readOnly: true}
+                - {name: baseline, mountPath: /baseline, readOnly: true}
+                - {name: out, mountPath: /out}
+                - {name: oc-bin, mountPath: /oc-bin}
+          volumes:
+            - name: scripts
+              configMap:
+                name: monitor-scripts
+            - name: baseline
+              configMap:
+                name: monitor-baseline
+            - name: out
+              persistentVolumeClaim:
+                claimName: monitor-pvc
+            - name: oc-bin
+              emptyDir: {}

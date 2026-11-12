@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: legacy-web, namespace: vm-lab, labels: {app: legacy-web}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: legacy-web}}
+  template:
+    metadata: {labels: {app: legacy-web}}
+    spec:
+      containers:
+        - {name: web, image: "docker.io/library/nginx:1.16", command: ["sleep", "3600"]}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: legacy-web, namespace: vm-lab}
+spec:
+  selector: {app: legacy-web}
+  ports: [{port: 8080, targetPort: 8080}]
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata: {name: legacy-web, namespace: vm-lab}
+spec:
+  to: {kind: Service, name: legacy-web}
+  port: {targetPort: 8080}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: report-svc, namespace: vm-internal, labels: {app: report-svc}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: report-svc}}
+  template:
+    metadata: {labels: {app: report-svc}}
+    spec:
+      containers:
+        - {name: web, image: "docker.io/library/nginx:1.16", command: ["sleep", "3600"]}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: report-svc, namespace: vm-internal}
+spec:
+  selector: {app: report-svc}
+  ports: [{port: 8080, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: batch-old, namespace: vm-batch, labels: {app: batch-old}}
+spec:
+  replicas: 0
+  selector: {matchLabels: {app: batch-old}}
+  template:
+    metadata: {labels: {app: batch-old}}
+    spec:
+      containers:
+        - {name: job, image: "docker.io/library/httpd:2.4.38", command: ["sleep", "3600"]}

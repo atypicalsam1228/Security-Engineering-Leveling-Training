@@ -1,0 +1,82 @@
+# The review gate for GRC-3. It lives here, outside the repository it reviews, so a pull request cannot edit it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: review-gate
+  namespace: build
+data:
+  review-gate.py: |
+    """Static review gate for an evidence collector script. Usage: review-gate.py FILE
+    Prints one line per problem and exits 1 if there is any. It reads the script as text
+    and never runs it, because the script is not yet trusted."""
+    import ast
+    import sys
+
+    WRITE_MODES = set("wax+")
+
+
+    def names_in(node):
+        return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+
+
+    def has_call(tree, attr):
+        return any(isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == attr for n in ast.walk(tree))
+
+
+    def has_string(tree, text):
+        return any(isinstance(n, ast.Constant) and n.value == text for n in ast.walk(tree))
+
+
+    def escapes(target):
+        return any(isinstance(n, ast.Constant) and isinstance(n.value, str) and (n.value.startswith("/") or ".." in n.value) for n in ast.walk(target))
+
+
+    def tainted_names(tree):
+        tainted = {"EVIDENCE_DIR"}
+        grew = True
+        while grew:
+            grew = False
+            for n in ast.walk(tree):
+                if isinstance(n, ast.Assign) and names_in(n.value) & tainted and not escapes(n.value):
+                    for t in n.targets:
+                        if isinstance(t, ast.Name) and t.id not in tainted:
+                            tainted.add(t.id)
+                            grew = True
+        return tainted
+
+
+    def write_target(call):
+        func = call.func
+        if isinstance(func, ast.Name) and func.id == "open" and call.args:
+            mode = call.args[1] if len(call.args) > 1 else next((k.value for k in call.keywords if k.arg == "mode"), None)
+            is_write = mode is not None and (not isinstance(mode, ast.Constant) or bool(WRITE_MODES & set(str(mode.value))))
+            return call.args[0] if is_write else None
+        if isinstance(func, ast.Attribute) and func.attr in ("write_text", "write_bytes"):
+            return func.value
+        return None
+
+
+    def problems(source):
+        tree = ast.parse(source)
+        found = []
+        if not (has_call(tree, "now") or has_call(tree, "utcnow")):
+            found.append("FAIL timestamp: no call to datetime.now, so the evidence has no collection time")
+        if not (has_call(tree, "sha256") and has_call(tree, "hexdigest")):
+            found.append("FAIL hash: no hashlib.sha256(...).hexdigest(), so the evidence cannot be checked later")
+        if not has_string(tree, "EVIDENCE_DIR"):
+            found.append("FAIL directory: the script never reads EVIDENCE_DIR from the environment")
+        tainted = tainted_names(tree)
+        for n in ast.walk(tree):
+            target = write_target(n) if isinstance(n, ast.Call) else None
+            if target is not None and (not names_in(target) & tainted or escapes(target)):
+                found.append(f"FAIL write: line {n.lineno} writes to a path not built from EVIDENCE_DIR")
+        return found
+
+
+    if __name__ == "__main__":
+        try:
+            issues = problems(open(sys.argv[1]).read())
+        except (OSError, SyntaxError, IndexError) as problem:
+            issues = [f"FAIL read: cannot read the script ({problem})"]
+        print("\n".join(issues) if issues else "PASS: timestamp, hash and write location all present")
+        sys.exit(1 if issues else 0)

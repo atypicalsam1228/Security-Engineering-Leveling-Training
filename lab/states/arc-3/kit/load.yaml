@@ -1,0 +1,13 @@
+# 20 small pods that break all three rules, used to give each mode something to record.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: load, namespace: arc-measure, labels: {arc-role: load}}
+spec:
+  replicas: 20
+  selector: {matchLabels: {arc-role: load}}
+  template:
+    metadata: {labels: {arc-role: load}}
+    spec:
+      containers:
+        # Deliberate :latest tag: this load must break the no-latest rule.
+        - {name: app, image: "registry.access.redhat.com/ubi9/ubi-minimal:latest", command: ["sleep", "infinity"], resources: {requests: {cpu: 1m, memory: 8Mi}}}

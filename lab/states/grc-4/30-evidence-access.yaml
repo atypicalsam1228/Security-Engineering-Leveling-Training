@@ -1,0 +1,26 @@
+# GRC-4: the pipeline service account may dry-run changes in demo (edit role), and the evidence volume exists.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pipeline-edit-demo
+  namespace: demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - kind: ServiceAccount
+    name: pipeline
+    namespace: build
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: evidence-work
+  namespace: build
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

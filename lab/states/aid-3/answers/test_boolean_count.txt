@@ -1,0 +1,14 @@
+Reference answer for AID-3 Step 2. Open it only after you have tried.
+
+1. The test. These are the two lines that go at the end of tests/test_boolean.py
+   (8 spaces before "with", 12 before "parse_reply"):
+
+        with self.assertRaises(ValueError):
+            parse_reply(reply)
+
+2. The flaw in the drafted shape.py. In Python, true and false count as whole
+   numbers (True is 1), so isinstance(True, int) is True and a count of true
+   passed the check. The exact type check does not have this problem:
+
+   drafted:  if not isinstance(data[name], kind):
+   fixed:    if type(data[name]) is not kind:

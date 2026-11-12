@@ -1,0 +1,265 @@
+# Policy, supply chain and delivery tools: vendor reference
+
+Retrieved 2026-10-30. All facts below come from vendor pages fetched on that date; each bullet cites its source number. Module ids are lab-state or generator ids found by grep.
+
+Contents
+1. Kyverno 1.19.2
+2. Cosign 3.1.4
+3. Trivy 0.76.1 and Trivy Operator
+4. OpenShift Pipelines / Tekton and tkn 0.46.2
+5. Argo CD 3.5.6 / OpenShift GitOps and argocd CLI
+
+---
+
+## Kyverno (1.19.2, Helm chart kyverno/kyverno 3.9.2)
+- Vendor docs (all retrieved 2026-10-30):
+  - [1] Installation, https://kyverno.io/docs/installation/methods/
+  - [2] Upgrading Kyverno, https://kyverno.io/docs/installation/upgrading/
+  - [3] Policy Types Overview, https://kyverno.io/docs/policy-types/overview/
+  - [4] Migrating to CEL Policies, https://kyverno.io/docs/guides/migration-to-cel/
+  - [5] Validate Rules (ClusterPolicy), https://kyverno.io/docs/policy-types/cluster-policy/validate/
+  - [6] Verify Images overview, https://kyverno.io/docs/policy-types/cluster-policy/verify-images/
+  - [7] Verify Images, Sigstore, https://kyverno.io/docs/policy-types/cluster-policy/verify-images/sigstore/
+  - [8] Policy Reports, https://kyverno.io/docs/policy-reports/
+  - [9] Policy Exceptions, https://kyverno.io/docs/exceptions/
+  - [10] ImageValidatingPolicy, https://kyverno.io/docs/policy-types/image-validating-policy/
+  - [11] High Availability, https://kyverno.io/docs/guides/high-availability/
+  - [12] Platform Notes (OpenShift), https://kyverno.io/docs/installation/platform-notes/
+- Role in this training: admission policy engine (pod hardening, signed-image gate, audit policies feeding policy reports). Modules: grc-2, grc-3, grc-4, grc-5, arc-2, arc-3, arc-5, aid-5, cps-5.
+- Best practices (vendor-stated):
+  - Install with Helm for production, into a dedicated namespace that holds no other applications. [1]
+  - For HA, the admission controller needs at least 3 replicas per the HA page; the install page says at least 2. Reports and background controllers gain availability only from extra replicas. [1][11]
+  - Webhooks fail closed by default. If all Kyverno pods are down, Pod-matching requests fail and recovery can need manual deletion of the ValidatingWebhookConfigurations. Chart 2.5.0 and later excludes the kyverno namespace by default. [1]
+  - Prefer namespaceSelector over objectSelector because object labels can be spoofed. [1]
+  - Set failureAction per rule (spec.rules[*].validate); the top-level spec.validationFailureAction is deprecated. [5]
+  - Rules that use request.userInfo or roles/subjects in match cannot run in background scans and must set background: false. [8]
+  - verifyImages: digests make image references immutable and tie the deployed image to the one scanned and verified. [6]
+  - Keep PolicyExceptions narrow (match specific resource names), and control who can create them with RBAC, a dedicated namespace and GitOps review. Exceptions are off until enablePolicyException is true. [9]
+  - Upgrading by image tag alone is not enough because CRDs change; read release notes for every minor you skip; with Helm, v1.19 manages CRDs through the kyverno-api chart dependency (crds.install). [2]
+  - To cut etcd load in large clusters, --allowedResults limits which report result types are stored (1.17+). [8]
+- Implementation guidance relevant to the lab:
+  - Install: helm repo add kyverno https://kyverno.github.io/kyverno/helm; helm install kyverno kyverno/kyverno -n kyverno --create-namespace. [1]
+  - OpenShift: the chart's pod securityContext may not fit the cluster SCCs; the page says to null the securityContext values, and that restricted-v2 (OCP 4.11+) lets the chart deploy unchanged. [12]
+  - View results: kubectl get policyreport -A; kubectl get clusterpolicyreport; add -o wide to see the resource; filter with jsonpath on result=="fail". [8]
+  - Audit mode records a violation in a PolicyReport and admits the resource; emitWarning: true also shows an admission warning. [5]
+  - Static key check: attestors.entries.keys.publicKeys accepts an inline key or k8s://<namespace>/<secret>; the Secret must hold a cosign.pub key. rekor.ignoreTlog: true disables the Rekor check. [7]
+  - verifyImages defaults: required, mutateDigest and verifyDigest all default to true. imageRegistryCredentials.secrets lists registry secrets; since 1.18 namespace/name notation reaches other namespaces (needs a Role and RoleBinding there). [6]
+  - Each verifyImages rule verifies signatures or attestations, not both. [7]
+  - Migration target for the signed-image gate: ImageValidatingPolicy (policies.kyverno.io/v1) with a cosign attestor, key.data / secretRef / kms, validationActions [Deny], evaluation.background.enabled false. [10]
+- Version notes:
+  - ClusterPolicy, Policy, CleanupPolicy and the legacy PolicyException are deprecated in 1.19 and scheduled for removal in 1.20 (docs table estimates Nov 2026). 1.19 is the last release with full support. [3][4]
+  - CEL types (ValidatingPolicy, MutatingPolicy, GeneratingPolicy, DeletingPolicy, ImageValidatingPolicy) are stable since 1.18. [3]
+  - Not supported in CEL types: allowExistingViolations, failureActionOverrides, manifests, podSecurity (use exceptions or per-control validations). [4]
+  - Admission warnings and the metric kyverno_deprecated_api_requests_total show legacy use; kyverno apply/test --warnings-as-errors fails CI on legacy policies. [4]
+  - 1.19: run `kyverno migrate` to rewrite stored policies.kyverno.io objects; the experimental `kyverno json scan` command was removed. [2]
+- Where this project differs:
+  - All modules use kyverno.io/v1 ClusterPolicy, which the vendor deprecates; the lab contract pins 1.19.2 so this works, but it blocks an upgrade to 1.20 (shortcut, documented in LAB-CONTRACT.md).
+  - Several grc/arc policies set background: true with Audit/Enforce at rule level; consistent with [5][8].
+  - No module installs Kyverno with HA (single-node lab, one replica per controller is the chart default [1]); shortcut.
+  - No module sets PolicyException; no module uses ValidatingPolicy.
+- Unconfirmed:
+  - Whether verifyImages in 1.19 accepts key signatures written in Cosign 3's legacy (non-bundle) format; no Kyverno page mentions Cosign v3 [7][10]. The modules already flag this.
+  - Docs pages are the "latest" site; none states the exact 1.19.2 patch. The migration page names 1.19 explicitly.
+  - Resource requests and memory sizing: the HA and install pages give none [1][11].
+
+---
+
+## Cosign (3.1.4)
+- Vendor docs (retrieved 2026-10-30):
+  - [1] Signing with Self-Managed Keys, https://docs.sigstore.dev/cosign/key_management/signing_with_self-managed_keys/
+  - [2] Key Management Overview, https://docs.sigstore.dev/cosign/key_management/overview/
+  - [3] Verifying Signatures, https://docs.sigstore.dev/cosign/verifying/verify/
+  - [4] Signing Containers, https://docs.sigstore.dev/cosign/signing/signing_with_containers/
+  - [5] Cosign CHANGELOG, https://raw.githubusercontent.com/sigstore/cosign/main/CHANGELOG.md
+  - [6] cosign sign reference, https://raw.githubusercontent.com/sigstore/cosign/main/doc/cosign_sign.md
+  - [7] cosign verify reference, https://raw.githubusercontent.com/sigstore/cosign/main/doc/cosign_verify.md
+  - [8] cosign attest reference, https://raw.githubusercontent.com/sigstore/cosign/main/doc/cosign_attest.md
+  - [9] Signing Blobs, https://docs.sigstore.dev/cosign/signing/signing_with_blobs/
+- Role in this training: signs the built image and attaches a CycloneDX SBOM attestation in the release pipeline; verification by hand and by Kyverno. Modules: grc-4 (mentioned in its TODO).
+- Best practices (vendor-stated):
+  - Keys: cosign generate-key-pair writes cosign.key and cosign.pub; password comes from a prompt or COSIGN_PASSWORD. Supported key types are RSA (PKCS#1.5 padding only), ECDSA, ED25519. [1]
+  - Prefer a KMS for key custody: supported are AWS KMS, GCP KMS, Azure Key Vault, HashiCorp Vault, OpenBao, OVHcloud KMS and Kubernetes Secrets, referenced by awskms://, gcpkms://, azurekms://, hashivault://, k8s:// style URIs. [2]
+  - Scope KMS permissions tightly and separate key-creation from signing permissions. [2]
+  - Export the public key (cosign public-key) so verification does not need KMS access. [2]
+  - Verification checks that the signed payload digest matches the image; --check-claims=false skips this and leaves claims unverified. [3]
+  - Signatures follow the OCI 1.1 referrers model in v3; cosign tree lists them, cosign clean deletes them (not on registries without delete, such as DockerHub). [4]
+  - The docs' sign examples reference images by digest (@sha256:...). The page gives no explicit rule. [4][6]
+- Implementation guidance relevant to the lab:
+  - Sign with a key: cosign sign --key cosign.key <IMAGE@DIGEST>; skip transparency log upload with --tlog-upload=false (shown in the vendor examples). [6]
+  - --yes skips confirmation prompts for non-destructive operations. [6]
+  - Key from a Kubernetes secret: --key accepts a path, KMS URI or Kubernetes Secret (k8s://namespace/name). [6][7]
+  - Verify: cosign verify --key cosign.pub <IMAGE>; k8s://[NAMESPACE]/[KEY] also accepted. [7]
+  - --insecure-ignore-tlog is for artifacts never uploaded to a log; the vendor notes such artifacts cannot be publicly verified. [7]
+  - Attest an SBOM: cosign attest --type cyclonedx --predicate <file> <IMAGE>; valid --type values include spdx, spdxjson, cyclonedx, vuln, openvex, slsaprovenance, custom. [8]
+  - Verify the attestation with cosign verify-attestation (same flags as verify, e.g. --key cosign.pub). [3]
+- Version notes:
+  - v3.0.0: the protobuf Sigstore bundle format and signing-config fetch from TUF are on by default; container signatures are stored as OCI 1.1 referring artifacts. [5]
+  - v3.0.3 deprecated --tlog-upload and --offline. [5]
+  - v3.0.5 deprecated rekor-entry-type, cosign triangulate and cosign copy; Rekor v2 needs a signed timestamp. [5]
+  - The changelog read stops at v3.0.5 (no v3.1.x entry found); 3.0.5 is the nearest documented release.
+  - --new-bundle-format and --use-signing-config do not appear in the published option lists for sign, verify or attest. [6][7][8]
+- Where this project differs:
+  - Private key held in a cluster Secret (k8s://build/cosign-signing) with a generated password; the vendor lists Kubernetes Secrets as a supported option [2], but recommends KMS-class custody; the module itself says production uses an HSM or KMS.
+  - The pipeline signs and attests by image digest, matching the vendor examples [4].
+  - Keyless (OIDC identity) signing is not exercised.
+- Unconfirmed:
+  - Current status of --use-signing-config and --new-bundle-format in 3.1.4 (hidden flags; only the module claims they work).
+  - Whether the k8s:// key password handling stores the password in the Secret as the module expects; the key-management page only says the Secret holds private key, public key and password. [2]
+  - Cosign 3.1.x release notes.
+
+---
+
+## Trivy (0.76.1) and Trivy Operator (not pinned)
+- Vendor docs (retrieved 2026-10-30):
+  - [1] Container Image target, https://trivy.dev/docs/latest/guide/target/container_image/
+  - [2] Filtering, https://trivy.dev/docs/latest/guide/configuration/filtering/
+  - [3] Vulnerability scanner, https://trivy.dev/docs/latest/guide/scanner/vulnerability/
+  - [4] Self-Hosting Databases, https://trivy.dev/docs/latest/guide/advanced/self-hosting/
+  - [5] Connectivity and air-gap, https://trivy.dev/docs/latest/guide/advanced/air-gap/
+  - [6] trivy image CLI reference, https://trivy.dev/docs/latest/guide/references/configuration/cli/trivy_image/
+  - [7] SBOM, https://trivy.dev/docs/latest/guide/target/sbom/
+  - [8] Reporting, https://trivy.dev/docs/latest/guide/configuration/reporting/
+  - [9] Trivy Operator home, https://aquasecurity.github.io/trivy-operator/latest/
+  - [10] Trivy Operator Helm install, https://aquasecurity.github.io/trivy-operator/latest/getting-started/installation/helm/
+  - [11] Trivy Operator configuration, https://raw.githubusercontent.com/aquasecurity/trivy-operator/main/docs/getting-started/installation/configuration.md
+  - [12] Trivy Operator VulnerabilityReport, https://raw.githubusercontent.com/aquasecurity/trivy-operator/main/docs/docs/crds/vulnerability-report.md
+  - [13] Trivy Operator OLM install, https://raw.githubusercontent.com/aquasecurity/trivy-operator/main/docs/getting-started/installation/olm.md
+- Role in this training: image scan and SBOM in the release pipeline, hand scans and ignore files for vulnerability work, and the in-cluster operator that writes reports. Modules: vm-2, vm-3, vm-4, vm-5, eng-0 (health check), grc-4.
+- Best practices (vendor-stated):
+  - Scan images by digest-pinned reference where possible; the page only shows tag and OCI-layout digest forms. [1]
+  - Default scanners are vuln and secret; add misconfig or license explicitly with --scanners. [1][6]
+  - Hide unfixed findings with --ignore-unfixed (shorthand for --ignore-status affected,will_not_fix,fix_deferred,end_of_life). [2][3]
+  - Severity comes from the chosen data source first, then CVSS, then NVD; override with --vuln-severity-source. [3]
+  - Suppress with .trivyignore (supports exp:YYYY-MM-DD) or the experimental YAML file passed with --ignorefile; YAML fields are id, paths, purls, expired_at (yyyy-mm-dd), statement. --show-suppressed lists what was hidden. [2]
+  - The DB is an OCI image; for restricted networks copy it to an internal registry and set --db-repository, --java-db-repository and --checks-bundle-repository. [4]
+  - To block all contact with check.trivy.dev set both --skip-version-check and --disable-telemetry; one alone is not enough. [5]
+  - Use SBOMs generated by Trivy where possible; other tools' SBOMs may be detected inaccurately. [7]
+  - Custom report templates can read environment variables; use only trusted templates. [8]
+- Implementation guidance relevant to the lab:
+  - Gate: trivy image --no-progress --scanners vuln --severity HIGH,CRITICAL --exit-code 1 <image>; --exit-code sets the exit code on findings. [6]
+  - --format values: table (default), json, template, sarif, cyclonedx, spdx, spdx-json, github, cosign-vuln. [6]
+  - Default --db-repository list: mirror.gcr.io/aquasec/trivy-db:2, ghcr.io/aquasecurity/trivy-db:2. Default --timeout 5m. [6]
+  - Air-gap cache: fetch trivy.db and metadata.json (oras pull ghcr.io/aquasecurity/trivy-db:2, or trivy image --cache-dir . --download-db-only) into the db subdirectory of the cache dir. [4]
+  - Operator: Helm chart in namespace trivy-system (example chart 0.32.1); uninstall does not remove CRDs, and deleting CRDs deletes all reports. [9][10]
+  - Operator reports: VulnerabilityReport, ConfigAuditReport, ExposedSecretReport, RbacAssessmentReport, InfraAssessmentReport, ClusterComplianceReport, SbomReport. [9]
+  - VulnerabilityReport summary fields: criticalCount, highCount, mediumCount, lowCount, unknownCount; labels trivy-operator.resource.namespace / .kind / .name / .container.name. [12]
+  - Operator settings: OPERATOR_TARGET_NAMESPACES (blank = all), OPERATOR_CONCURRENT_SCAN_JOBS_LIMIT 10, OPERATOR_SCAN_JOB_TIMEOUT 5m, OPERATOR_SCANNER_REPORT_TTL 24h, trivy.severity default all levels. [11]
+  - OLM install: Subscription in trivy-system, OperatorGroup selecting all namespaces, OPERATOR_EXCLUDE_NAMESPACES=kube-system. [13]
+- Version notes:
+  - The YAML ignore file is marked experimental in the docs (the lab's vm-4 module already says so). [2]
+  - The operator project says it is incubating and CRDs may change. [9]
+  - Rich scanner options can push operator reports past the etcd object size limit (about 1.5 MiB). [12]
+  - The docs read are the "latest" site; the container-image page banner said it was not the latest version, so exact 0.76.1 wording is unconfirmed.
+- Where this project differs:
+  - vm-4 uses `--ignorefile` with expired_at YAML; consistent with [2].
+  - Operator is installed by the lab build in security-tools, not trivy-system as in the vendor Helm example [10]; install method is not stated in the modules.
+- Unconfirmed:
+  - Trivy DB update cadence and rate-limit guidance: no fetched page states them.
+  - Operator Helm value names for ignoreUnfixed, dbRepository, offline scan (the fetched configuration page lists only those in [11]).
+  - Which Trivy Operator release matches Trivy 0.76.1.
+
+---
+
+## OpenShift Pipelines / Tekton and tkn (tkn 0.46.2; OpenShift Pipelines version not pinned)
+- Vendor docs (retrieved 2026-10-30):
+  - [1] Red Hat OpenShift Pipelines 1.20, Installing, https://docs.redhat.com/en/documentation/red_hat_openshift_pipelines/1.20/html/installing_and_configuring/installing-pipelines
+  - [2] 1.20, TektonConfig customization, https://docs.redhat.com/en/documentation/red_hat_openshift_pipelines/1.20/html/installing_and_configuring/customizing-configurations-in-the-tektonconfig-cr
+  - [3] 1.18, Configuring the security context for pods, https://docs.redhat.com/en/documentation/red_hat_openshift_pipelines/1.18/html/securing_openshift_pipelines/configuring-security-context-for-pods
+  - [4] 1.20, Securing OpenShift Pipelines (index), https://docs.redhat.com/en/documentation/red_hat_openshift_pipelines/1.20/html/securing_openshift_pipelines/index
+  - [5] Tekton Pipelines, https://tekton.dev/docs/pipelines/pipelines/
+  - [6] Tekton PipelineRuns, https://tekton.dev/docs/pipelines/pipelineruns/
+  - [7] Tekton Tasks, https://tekton.dev/docs/pipelines/tasks/
+  - [8] Tekton Workspaces, https://tekton.dev/docs/pipelines/workspaces/
+  - [9] Tekton Authentication at Run Time, https://tekton.dev/docs/pipelines/auth/
+  - [10] Tekton Cluster Resolver, https://tekton.dev/docs/pipelines/cluster-resolver/
+  - [11] tkn pipeline start, https://raw.githubusercontent.com/tektoncd/cli/main/docs/cmd/tkn_pipeline_start.md
+  - [12] Tekton CLI install, https://tekton.dev/docs/cli/
+- Role in this training: runs the secure-release pipeline (build, scan, sign, deploy), evidence collection and review-gate pipelines. Modules: grc-2, grc-3, grc-4, grc-5, aid-3, sdr-5, vm-4, vm-5, eng-0 (health check).
+- Best practices (vendor-stated):
+  - Install from OperatorHub or a Subscription (package openshift-pipelines-operator-rh, redhat-operators); Automatic approval is recommended so OLM handles upgrades. [1]
+  - After install, check oc get tektonconfig config shows READY True; the console can show Succeeded while components are still installing. [1]
+  - The default pipeline service account uses pipelines-scc (anyuid-based, with fsGroup MustRunAs). The default binding is flagged as a risk because of RunAsAny; createRbacResource: false stops cluster-wide RBAC creation. [2][3]
+  - Set spec.platforms.openshift.scc.default and .maxAllowed in TektonConfig; maxAllowed does not apply to runs with a custom service account and SCC. [3]
+  - For fsGroup timeouts, use a custom SCC (fsGroup RunAsAny) with a custom service account; the vendor says this also survives upgrades that change defaults. [3]
+  - Do not bind the same PVC to pipelines of different trust levels; a volumeClaimTemplate gives per-run isolation. [8]
+  - Secret workspaces mount read-only and are limited to 1 MB. [8]
+  - Inject single secret keys with env/secretKeyRef rather than envFrom; use runAsUser (not only runAsNonRoot) to set a non-root user. [7]
+  - Results ride in 4096-byte termination messages; use a workspace for results over about 1 KB. [7]
+  - Configure the scheduled pruner under spec.pruner (keep default 100, schedule "* 8 * * *"); namespace annotations such as operator.tekton.dev/prune.skip override it. [2]
+- Implementation guidance relevant to the lab:
+  - Secrets for git/registry: annotate with tekton.dev/git-N or tekton.dev/docker-N and list under the service account's secrets; unannotated secrets are ignored. [9]
+  - Run as a service account: spec.taskRunTemplate.serviceAccountName (v1); per-task override in taskRunSpecs. [6]
+  - Timeouts: spec.timeouts.pipeline / tasks / finally; default pipeline timeout 60 minutes; pipeline must be >= tasks + finally. [6]
+  - Order tasks with runAfter; result references create implicit ordering. [5]
+  - Cluster resolver parameters: kind, name, namespace; restrict with allowed-namespaces / blocked-namespaces in cluster-resolver-config; needs enable-cluster-resolver true. [10]
+  - tkn pipeline start: -p key=value, -w name=x,secret=name | name=x,claimName=pvc | name=x,emptyDir="" , -s service account, --showlog, --use-param-defaults, --pipeline-timeout, -o yaml|json|name. [11]
+  - tkn install options (deb, rpm, tarball, kubectl plugin). [12]
+- Version notes:
+  - Red Hat docs were read for 1.20 (and 1.18 for SCC); the version paired with the lab's OpenShift 4.22 was not found, so these are the nearest available.
+  - Update channels: latest, or pipelines-<version>; preview and stable are unavailable from OCP 4.11. [1]
+  - The event-based pruner is Technology Preview in 1.20 and requires disabling the default pruner. [2]
+  - Cluster resolver needs Tekton Pipelines v0.41.0 or later. [10]
+- Where this project differs:
+  - The deploy task uses the cluster resolver to load the openshift-client task from namespace openshift-pipelines; consistent with [10], and relies on the operator-shipped task.
+  - Private signing key is passed through a secret workspace (read-only, consistent with [8]); password via env/secretKeyRef (consistent with [7]).
+  - Workspaces use emptyDir in aid-3; the vendor warns against sharing a PVC across trust levels [8]; all lab runs are one trust level.
+  - tkn flag `--exit-with-pipelinerun-error` and the `emptyDir=` spelling (aid-3) are flagged by the module as unconfirmed; `emptyDir=""` is the vendor spelling [11], and the option list read for pipeline start does not show --exit-with-pipelinerun-error.
+  - No module configures the pruner, timeouts or resource limits on tasks.
+- Unconfirmed:
+  - tkn 0.46.2 release notes (only the main-branch command doc was read).
+  - Whether --exit-with-pipelinerun-error exists on tkn pipeline start in 0.46.2.
+  - OpenShift Pipelines version shipped for OCP 4.22.
+
+---
+
+## Argo CD (3.5.6), OpenShift GitOps and the argocd CLI
+- Vendor docs (retrieved 2026-10-30):
+  - [1] Security, https://argo-cd.readthedocs.io/en/release-3.5/operator-manual/security/
+  - [2] Automated Sync Policy, https://argo-cd.readthedocs.io/en/release-3.5/user-guide/auto_sync/
+  - [3] RBAC Configuration, https://argo-cd.readthedocs.io/en/release-3.5/operator-manual/rbac/
+  - [4] Projects, https://argo-cd.readthedocs.io/en/release-3.5/user-guide/projects/
+  - [5] Upgrade overview, https://argo-cd.readthedocs.io/en/release-3.5/operator-manual/upgrading/overview/
+  - [6] Upgrade 3.4 to 3.5, https://argo-cd.readthedocs.io/en/release-3.5/operator-manual/upgrading/3.4-3.5/
+  - [7] High Availability / sizing, https://argo-cd.readthedocs.io/en/release-3.5/operator-manual/high_availability/
+  - [8] Disaster Recovery, https://argo-cd.readthedocs.io/en/release-3.5/operator-manual/disaster_recovery/
+  - [9] Argo CD Core, https://argo-cd.readthedocs.io/en/release-3.5/operator-manual/core/
+  - [10] argocd app create reference, https://argo-cd.readthedocs.io/en/release-3.5/user-guide/commands/argocd_app_create/
+  - [11] argocd command reference, https://argo-cd.readthedocs.io/en/release-3.5/user-guide/commands/argocd/
+  - [12] Red Hat OpenShift GitOps 1.17, Argo CD instance, https://docs.redhat.com/en/documentation/red_hat_openshift_gitops/1.17/html-single/argo_cd_instance/index
+  - [13] Red Hat OpenShift GitOps 1.17, Argo CD applications, https://docs.redhat.com/en/documentation/red_hat_openshift_gitops/1.17/html-single/argo_cd_applications/index
+- Role in this training: GitOps deployment of the demo app, drift/self-heal and change control from a git repo. Modules: grc-5.
+- Best practices (vendor-stated):
+  - Create dedicated AppProjects with explicit sourceRepos, destinations and resource lists; the built-in default project is fully permissive and can be locked by emptying its sourceRepos and destinations. [4]
+  - Use permitOnlyProjectScopedClusters and deny rules for sensitive namespaces such as kube-system. [4]
+  - Pruning and self-heal are both off by default; prune: true / --auto-prune and selfHeal: true / --self-heal enable them. [2]
+  - Self-heal re-sync waits 5 seconds by default; the reconciliation poll is 120s plus up to 60s jitter. [2]
+  - Admin: change the admin password regularly; narrow the server and controller ClusterRoles; allow only trusted repositories; disable unused config tools (Helm, Kustomize). [1]
+  - Enforce TLS 1.2 minimum with --tlsminversion 1.2; Redis traffic is plain by default. [1]
+  - policy.default grants a role to every authenticated user and cannot be overridden by deny; use a minimal custom role. [3]
+  - Validate policies with argocd admin settings rbac validate and rbac can. [3]
+  - Back up with argocd admin export / import before a major upgrade; check the namespace, because export does not fail on the wrong one. [5][8]
+  - Sizing: scale repo-server when manifest generation times out; for ~1000 apps the page uses 50 status and 25 operation processors; set GOMEMLIMIT to about 80-90 percent of the memory limit. [7]
+  - OpenShift GitOps: labeling a namespace argocd.argoproj.io/managed-by=<argocd namespace> grants Argo CD namespace-admin there; CONTROLLER_CLUSTER_ROLE / SERVER_CLUSTER_ROLE limit this. [12]
+- Implementation guidance relevant to the lab:
+  - Create an app: argocd app create --repo --path --dest-server --dest-namespace --project --sync-policy automated --self-heal --auto-prune. [10]
+  - Core mode: --core talks directly to Kubernetes; set the kube context namespace to the Argo CD namespace first. Needs permissions on Application resources; the Argo CD RBAC model, API and OIDC are not available. [9][11]
+  - Component names: --repo-server-name etc. (or env vars) are needed when labels differ from defaults. [11]
+  - RBAC rule format: p, <role>, <resource>, <action>, <project>/<app>, allow|deny; groups via g,. [3]
+  - OpenShift GitOps: set RBAC in the ArgoCD resource spec.rbac (defaultPolicy, policy, scopes, policyMatcher); disableAdmin disables the admin user (default false). [12]
+  - Git TLS trust: spec.tls.initialCerts populates argocd-tls-certs-cm; ca.configMapName supplies a CA. [12]
+  - Default instance lives in openshift-gitops; DISABLE_DEFAULT_ARGOCD_INSTANCE=true in the Subscription stops it. [12]
+- Version notes:
+  - 3.5 upgrade: Helm 4 is used for all rendering (helm.version v3 ignored); plain-HTTP OCI repos need --insecure-oci-force-http; repo-server SSH validates against argocd-ssh-known-hosts-cm; --repo-server-strict-tls deprecated; GnuPG signature configuration deprecated in favour of sourceIntegrity. [6]
+  - Upgrade with `kubectl apply --server-side --force-conflicts` of the full manifest, and read notes for each minor crossed. [5]
+  - Red Hat docs read are for GitOps 1.17 and 1.17 applications; the GitOps release that ships Argo CD 3.5 was not determined.
+- Where this project differs:
+  - Uses --core mode (and a repo secret labeled argocd.argoproj.io/secret-type=repository); the vendor lists core mode as a headless option that drops Argo CD RBAC [9].
+  - Gitea token stored as a repository secret with password-style credentials; no mention of a repo-scoped read-only token in vendor pages.
+  - Lab reconciliation and self-heal timings left at defaults; no HA, sharding or resource requests set (single node; shortcut).
+  - No export/import backup is practiced.
+- Unconfirmed:
+  - Whether argocd 3.5.6 core mode finds the OpenShift GitOps repo server via ARGOCD_REPO_SERVER_NAME (the module flags this too).
+  - OpenShift GitOps documentation for the release paired with Argo CD 3.5.6; the install-procedure page timed out and was not read.
+  - Supported sync-option spelling `Prune=true` versus `--auto-prune`: both appear in vendor pages ([10], [13]) without reconciliation.
+
+---

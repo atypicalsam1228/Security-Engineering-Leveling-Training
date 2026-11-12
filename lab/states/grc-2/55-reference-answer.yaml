@@ -1,0 +1,13 @@
+# The reference answer for the GRC-2 writing exercise (Step 5). The learner opens it only after trying.
+# The same text is shown in the module's answer block (generators/content/grc_2.py).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evidence-reference
+  namespace: build
+data:
+  my_check.py: |
+    def root_pods():
+        items = oc_json("get", "deployments", "-n", "grc2-workloads")["items"]
+        risky = [d for d in items if not (d["spec"]["template"]["spec"].get("securityContext", {}).get("runAsNonRoot") is True or all(c.get("securityContext", {}).get("runAsNonRoot") is True for c in d["spec"]["template"]["spec"]["containers"]))]
+        return {"total": len(items), "without_non_root": len(risky), "names": sorted(d["metadata"]["name"] for d in risky)}

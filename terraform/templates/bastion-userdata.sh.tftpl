@@ -1,0 +1,373 @@
+#!/bin/bash
+# Bastion bootstrap (cloud-init user data). Rendered by Terraform templatefile().
+# Only the three template values (region, artifacts_bucket, ocp_channel) are
+# substituted. Shell variables below are written without braces on purpose.
+set -euo pipefail
+exec > >(tee -a /var/log/lab-bootstrap.log) 2>&1
+
+REGION="${region}"
+BUCKET="${artifacts_bucket}"
+CHANNEL="${ocp_channel}"
+
+# The NAT gateway can still be coming up when this instance boots: retry for about 10 minutes
+# instead of giving up on the first timeout.
+retry() {
+  local n=0
+  until "$@"; do
+    n=$((n + 1))
+    if [ "$n" -ge 40 ]; then
+      echo "giving up after $n attempts: $*"
+      return 1
+    fi
+    echo "attempt $n failed, retrying in 15s: $*"
+    sleep 15
+  done
+}
+
+retry dnf install -y jq tar curl unzip
+
+# Session Manager agent (skipped if the AMI already ships it).
+if ! systemctl list-unit-files | grep -q '^amazon-ssm-agent'; then
+  retry dnf install -y "https://s3.$REGION.amazonaws.com/amazon-ssm-$REGION/latest/linux_amd64/amazon-ssm-agent.rpm"
+fi
+systemctl enable --now amazon-ssm-agent
+
+# AWS CLI v2.
+if ! command -v aws >/dev/null 2>&1; then
+  retry curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+  unzip -q /tmp/awscliv2.zip -d /tmp
+  /tmp/aws/install
+fi
+
+mkdir -p /var/lib/lab/cluster
+chmod 700 /var/lib/lab /var/lib/lab/cluster
+
+cat > /usr/local/bin/lab-install.sh <<'LABEOF'
+#!/bin/bash
+# Waits for install-config.yaml in the artifacts bucket, then runs
+# openshift-install-fips. Output goes to /var/log/lab-install.log (stream it
+# with: aws ssm start-session --document-name AWS-StartInteractiveCommand
+# --parameters command="tail -n +1 -F /var/log/lab-install.log").
+# Handoff keys in the bucket:
+#   install/install-config.yaml  in   (deleted from S3 once read)
+#   install/destroy              in   (marker: run destroy cluster)
+#   install/status               out  (installing | complete | failed:<rc> | destroyed)
+#   install/auth/kubeconfig      out
+#   install/auth/kubeadmin-password out
+set -uo pipefail
+# install-config.yaml carries the pull secret: nothing this script writes may be world-readable.
+umask 077
+BUCKET="__BUCKET__"
+CHANNEL="__CHANNEL__"
+WORK=/var/lib/lab
+DIR=$WORK/cluster
+LOG=/var/log/lab-install.log
+export AWS_DEFAULT_REGION="__REGION__"
+INSTALLER_USER="${lab_id}-installer"
+
+touch "$LOG"
+chmod 644 "$LOG"   # streamed by ssm-user; installer output is redacted below
+log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" | tee -a "$LOG"; }
+status() { echo "$1" | aws s3 cp - "s3://$BUCKET/install/status" --sse aws:kms >/dev/null; }
+
+# Mint mode needs a long-term key: the installer rejects instance-role credentials.
+# Creates a key for the Terraform-built installer user and prints "<id> <secret>" once the
+# key works. Nothing here is logged. The install key stays valid (the cluster keeps it);
+# lab down deletes the user and its keys.
+new_installer_key() {
+  local out id secret i
+  out=$(aws iam create-access-key --user-name "$INSTALLER_USER" --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text) || return 1
+  id=$(echo "$out" | awk '{print $1}')
+  secret=$(echo "$out" | awk '{print $2}')
+  for i in $(seq 1 30); do
+    if AWS_ACCESS_KEY_ID="$id" AWS_SECRET_ACCESS_KEY="$secret" aws sts get-caller-identity >/dev/null 2>&1; then
+      sleep 10   # permissions can lag the key by a few seconds
+      echo "$id $secret"
+      return 0
+    fi
+    sleep 5
+  done
+  return 1
+}
+
+if [ "$(cat /proc/sys/crypto/fips_enabled)" != "1" ]; then
+  log "FIPS mode is not enabled on this host; refusing to run the installer."
+  exit 1
+fi
+
+MIRROR="https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/$CHANNEL"
+
+ensure_tools() {
+  if ! command -v oc >/dev/null 2>&1; then
+    log "Downloading oc from $MIRROR"
+    curl -fsSL "$MIRROR/openshift-client-linux.tar.gz" | tar -xz -C /usr/local/bin oc kubectl || return 1
+  fi
+  if ! command -v openshift-install-fips >/dev/null 2>&1; then
+    local pull_from
+    pull_from=$(curl -fsSL "$MIRROR/release.txt" | awk '/^Pull From:/ {print $3}')
+    log "Extracting openshift-install-fips from $pull_from"
+    oc adm release extract --command=openshift-install-fips --from="$pull_from" \
+      --registry-config="$WORK/pull-secret.json" --to=/usr/local/bin || return 1
+  fi
+}
+
+do_create() {
+  cp "$WORK/install-config.yaml" "$DIR/install-config.yaml"
+  aws s3 rm "s3://$BUCKET/install/install-config.yaml" >/dev/null
+  # The lab appends one line:  pullSecret: '<json>'
+  sed -n "s/^pullSecret: '\(.*\)'\$/\1/p" "$DIR/install-config.yaml" > "$WORK/pull-secret.json"
+  chmod 600 "$WORK/pull-secret.json" "$DIR/install-config.yaml"
+  rm -f "$WORK/install-config.yaml"
+  status installing
+  if ! ensure_tools; then
+    rc=99
+  elif ! creds=$(new_installer_key); then
+    log "Could not create an access key for IAM user $INSTALLER_USER."
+    rc=98
+  else
+    read -r key_id key_secret <<< "$creds"
+    # metadata.json names every resource the installer creates. Save it the moment it exists, so a
+    # failed or interrupted install can still be destroyed ('destroy cluster' reads it).
+    ( while [ ! -f "$DIR/metadata.json" ]; do sleep 5; done
+      aws s3 cp "$DIR/metadata.json" "s3://$BUCKET/install/state/metadata.json" --sse aws:kms >/dev/null || true ) &
+    saver=$!
+    # The installer prints the kubeadmin password in its last lines; keep it out of the log.
+    AWS_ACCESS_KEY_ID="$key_id" AWS_SECRET_ACCESS_KEY="$key_secret" \
+      openshift-install-fips create cluster --dir "$DIR" --log-level=info 2>&1 |
+      sed -u -E 's/(password: ")[^"]*/\1[redacted]/I' | tee -a "$LOG"
+    rc=$${PIPESTATUS[0]}
+    kill "$saver" 2>/dev/null || true
+    unset key_id key_secret creds
+  fi
+  if [ "$rc" = "0" ]; then
+    aws s3 cp "$DIR/auth/kubeconfig" "s3://$BUCKET/install/auth/kubeconfig" --sse aws:kms >/dev/null
+    aws s3 cp "$DIR/auth/kubeadmin-password" "s3://$BUCKET/install/auth/kubeadmin-password" --sse aws:kms >/dev/null
+    # Kept in S3 so a bastion recreated after a pause can destroy and export (unverified).
+    aws s3 cp "$DIR/metadata.json" "s3://$BUCKET/install/state/metadata.json" --sse aws:kms >/dev/null || true
+    touch "$WORK/installed"
+    status complete
+  else
+    # Keep the metadata of a failed install too, so 'lab down' can still destroy what it created.
+    [ -f "$DIR/metadata.json" ] && aws s3 cp "$DIR/metadata.json" "s3://$BUCKET/install/state/metadata.json" --sse aws:kms >/dev/null || true
+    status "failed:$rc"
+  fi
+  rm -f "$WORK/install-config.yaml"
+}
+
+# Last resort when metadata.json is gone: the installer tags everything it creates with
+# kubernetes.io/cluster/<infraID>=owned, and 'destroy cluster' only needs that tag, the cluster
+# name and the region. Returns 1 when no tagged instance exists (nothing to destroy).
+# UNVERIFIED against a live cluster.
+rebuild_metadata() {
+  local infra name
+  infra=$(aws ec2 describe-instances \
+    --filters "Name=tag-key,Values=kubernetes.io/cluster/*" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+    --query 'Reservations[].Instances[].Tags[?starts_with(Key, `kubernetes.io/cluster/`) && Value==`owned`].Key' \
+    --output text | tr '\t' '\n' | sed 's|^kubernetes.io/cluster/||' | sort -u | head -n 1)
+  [ -n "$infra" ] || return 1
+  name=$${infra%-*}
+  mkdir -p "$DIR"
+  printf '{"clusterName":"%s","infraID":"%s","aws":{"region":"%s","identifier":[{"kubernetes.io/cluster/%s":"owned"}]}}\n' \
+    "$name" "$infra" "$AWS_DEFAULT_REGION" "$infra" > "$DIR/metadata.json"
+  chmod 600 "$DIR/metadata.json"
+}
+
+# Reports "destroyed" only when the installer really succeeded (or found nothing to destroy).
+# Any other outcome sets destroy-failed:<rc> and keeps the saved state so 'lab down' can try again.
+do_destroy() {
+  local rc=1
+  log "Destroy marker found; running destroy cluster"
+  ensure_tools || true
+  if [ ! -f "$DIR/metadata.json" ]; then
+    log "metadata.json is missing; rebuilding it from the cluster's resource tags"
+    if ! rebuild_metadata; then
+      log "No tagged cluster instances found; nothing for the installer to destroy"
+      rc=0
+    fi
+  fi
+  if [ "$rc" != "0" ] && [ -f "$DIR/metadata.json" ]; then
+    if creds=$(new_installer_key); then
+      read -r key_id key_secret <<< "$creds"
+      AWS_ACCESS_KEY_ID="$key_id" AWS_SECRET_ACCESS_KEY="$key_secret" \
+        openshift-install-fips destroy cluster --dir "$DIR" --log-level=info 2>&1 | tee -a "$LOG"
+      rc=$${PIPESTATUS[0]}
+      aws iam delete-access-key --user-name "$INSTALLER_USER" --access-key-id "$key_id" >/dev/null 2>&1 || true
+      unset key_id key_secret creds
+    else
+      log "Could not create an access key for IAM user $INSTALLER_USER; destroy cluster skipped."
+    fi
+  fi
+  aws s3 rm "s3://$BUCKET/install/destroy" >/dev/null
+  if [ "$rc" = "0" ]; then
+    aws s3 rm "s3://$BUCKET/install/auth/" --recursive >/dev/null
+    aws s3 rm "s3://$BUCKET/install/state/" --recursive >/dev/null
+    rm -f "$WORK/installed"
+    status destroyed
+  else
+    log "destroy cluster did not finish (rc $rc); saved state kept"
+    status "destroy-failed:$rc"
+  fi
+}
+
+# A bastion recreated after a pause has an empty installer directory but the
+# cluster still exists: restore what destroy and export need from the bucket.
+restore_state() {
+  [ -f "$DIR/metadata.json" ] && return 0
+  mkdir -p "$DIR/auth"
+  if aws s3 cp "s3://$BUCKET/install/state/metadata.json" "$DIR/metadata.json" >/dev/null 2>&1; then
+    aws s3 cp "s3://$BUCKET/install/auth/kubeconfig" "$DIR/auth/kubeconfig" >/dev/null 2>&1 || true
+    chmod 600 "$DIR/metadata.json" "$DIR/auth/kubeconfig" 2>/dev/null || true
+    touch "$WORK/installed"
+    log "Restored installer state from the bucket"
+  fi
+}
+restore_state
+
+log "lab-install ready; waiting for install/install-config.yaml in s3://$BUCKET"
+while true; do
+  if aws s3api head-object --bucket "$BUCKET" --key install/destroy >/dev/null 2>&1; then
+    do_destroy
+  elif [ ! -f "$WORK/installed" ] && aws s3 cp "s3://$BUCKET/install/install-config.yaml" "$WORK/install-config.yaml" >/dev/null 2>&1; then
+    do_create
+  fi
+  sleep 15
+done
+LABEOF
+sed -i -e "s|__BUCKET__|$BUCKET|" -e "s|__CHANNEL__|$CHANNEL|" -e "s|__REGION__|$REGION|" /usr/local/bin/lab-install.sh
+chmod 700 /usr/local/bin/lab-install.sh
+
+%{ if install_export ~}
+# ---- /opt/lab/export.sh (cost controls): save lab files to the guard bucket ----
+mkdir -p /opt/lab
+cat > /opt/lab/export.sh <<'EXPEOF'
+#!/bin/bash
+# Usage: /opt/lab/export.sh <LAB_ID> <GUARD_BUCKET>
+# Saves Gitea repositories (git bundles), namespace YAML without Secrets,
+# MANIFEST.json and restore.sh to s3://<bucket>/saves/<LAB_ID>/<UTC timestamp>/.
+#
+# UNVERIFIED against a live cluster: see terraform/README.md, section "export.sh assumptions".
+# Secrets are never exported: kind Secret is not in KINDS and is filtered again by jq.
+set -uo pipefail
+umask 077
+
+LAB_ID="$${1:?usage: export.sh <LAB_ID> <GUARD_BUCKET>}"
+GUARD="$${2:?usage: export.sh <LAB_ID> <GUARD_BUCKET>}"
+printf '%s' "$LAB_ID" | grep -Eq '^[a-z0-9][a-z0-9-]{0,40}$' || { echo "invalid LAB_ID" >&2; exit 2; }
+
+export KUBECONFIG=/var/lib/lab/cluster/auth/kubeconfig
+export PATH="$PATH:/usr/local/bin"
+NAMESPACES="demo build siem chat gitea keycloak kyverno security-tools"
+KINDS="deployments,statefulsets,daemonsets,services,routes,configmaps,persistentvolumeclaims,serviceaccounts,roles,rolebindings,networkpolicies,cronjobs,jobs"
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+OUT="$(mktemp -d /var/tmp/lab-export.XXXXXX)"
+trap 'rm -rf "$OUT"' EXIT
+mkdir -p "$OUT/gitea" "$OUT/cluster"
+WARN="$OUT/.warnings"
+: > "$WARN"
+warn() { echo "$1" >> "$WARN"; }
+
+# --- Gitea repositories as git bundles ---
+GITEA_POD="$(oc -n gitea get pod -l app=gitea -o name 2>/dev/null | head -n1)"
+GITEA_USER="$(oc -n gitea get secret gitea-admin -o jsonpath='{.data.username}' 2>/dev/null | base64 -d 2>/dev/null)"
+GITEA_PASS="$(oc -n gitea get secret gitea-admin -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null)"
+if [ -n "$GITEA_POD" ] && [ -n "$GITEA_USER" ]; then
+  REPOS="$(oc -n gitea exec "$GITEA_POD" -- curl -fsS -u "$GITEA_USER:$GITEA_PASS" \
+    'http://localhost:3000/api/v1/repos/search?limit=200' 2>/dev/null | jq -r '.data[].full_name' 2>/dev/null)"
+  for repo in $REPOS; do
+    case "$repo" in *[!A-Za-z0-9._/-]*) warn "skipped odd repo name"; continue ;; esac
+    safe="$(printf '%s' "$repo" | tr '/' '_')"
+    if oc -n gitea exec "$GITEA_POD" -- git -C "/data/git/gitea-repositories/$repo.git" bundle create - --all \
+      > "$OUT/gitea/$safe.bundle" 2>/dev/null && [ -s "$OUT/gitea/$safe.bundle" ]; then
+      :
+    else
+      rm -f "$OUT/gitea/$safe.bundle"
+      warn "gitea bundle failed: $repo"
+    fi
+  done
+else
+  warn "gitea pod or admin credentials not found; no repositories saved"
+fi
+
+# --- Namespace YAML, Secrets excluded ---
+for ns in $NAMESPACES; do
+  if oc get namespace "$ns" >/dev/null 2>&1; then
+    if ! oc -n "$ns" get "$KINDS" -o json --ignore-not-found 2>/dev/null |
+      jq '.items |= map(select(.kind != "Secret")
+            | del(.status, .metadata.managedFields, .metadata.uid, .metadata.resourceVersion,
+                  .metadata.creationTimestamp, .metadata.ownerReferences, .metadata.selfLink))' \
+      > "$OUT/cluster/$ns.yaml" 2>/dev/null || [ ! -s "$OUT/cluster/$ns.yaml" ]; then
+      rm -f "$OUT/cluster/$ns.yaml"
+      warn "oc get failed: $ns"
+    elif grep -q '"kind": *"Secret"' "$OUT/cluster/$ns.yaml"; then
+      rm -f "$OUT/cluster/$ns.yaml"
+      warn "secret found in $ns export; namespace omitted"
+    fi
+  else
+    warn "namespace missing: $ns"
+  fi
+done
+
+# --- restore.sh ---
+cat > "$OUT/restore.sh" <<'RESTOREEOF'
+#!/bin/bash
+# Restore helper (UNVERIFIED). Run from the directory holding this file after
+# `lab pull`. Applies namespace YAML with `oc apply` and prints how to push each
+# bundle back to Gitea. Secrets are NOT in this save: recreate them yourself.
+set -uo pipefail
+for f in cluster/*.yaml; do
+  [ -e "$f" ] || continue
+  echo "applying $f"
+  oc apply -f "$f" || echo "  apply reported errors for $f"
+done
+for b in gitea/*.bundle; do
+  [ -e "$b" ] || continue
+  name="$(basename "$b" .bundle)"
+  echo "bundle: $b"
+  echo "  git clone --mirror $b $name.git && git -C $name.git push --mirror <new Gitea remote URL for $name>"
+done
+RESTOREEOF
+chmod 700 "$OUT/restore.sh"
+
+# --- MANIFEST.json ---
+FILES="$(cd "$OUT" && find . -type f ! -name MANIFEST.json ! -name .warnings | sed 's|^\./||' | sort | jq -R . | jq -s .)"
+WARNJSON="$(jq -R . < "$WARN" | jq -s .)"
+jq -n --arg lab "$LAB_ID" --arg ts "$TS" --argjson files "$FILES" --argjson warnings "$WARNJSON" \
+  '{lab_id: $lab, timestamp: $ts, secrets_exported: false, files: $files, warnings: $warnings}' > "$OUT/MANIFEST.json"
+rm -f "$WARN"
+
+# --- Upload (MANIFEST.json last, so its presence marks a complete save) ---
+DEST="s3://$GUARD/saves/$LAB_ID/$TS"
+aws s3 cp "$OUT" "$DEST/" --recursive --exclude MANIFEST.json --sse aws:kms --only-show-errors || exit 1
+aws s3 cp "$OUT/MANIFEST.json" "$DEST/MANIFEST.json" --sse aws:kms --only-show-errors || exit 1
+echo "saved to $DEST"
+exit 0
+EXPEOF
+chmod 700 /opt/lab/export.sh
+%{ endif ~}
+
+cat > /etc/systemd/system/lab-install.service <<'UNITEOF'
+[Unit]
+Description=Lab OpenShift FIPS installer runner
+After=network-online.target amazon-ssm-agent.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/lab-install.sh
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+UNITEOF
+systemctl daemon-reload
+systemctl enable lab-install.service
+
+# Turn FIPS mode on, then reboot. The service starts after the reboot and
+# refuses to run unless /proc/sys/crypto/fips_enabled is 1.
+if [ "$(cat /proc/sys/crypto/fips_enabled)" != "1" ]; then
+  fips-mode-setup --enable
+  systemctl reboot
+else
+  systemctl start lab-install.service
+fi

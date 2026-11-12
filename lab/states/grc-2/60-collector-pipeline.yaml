@@ -1,0 +1,56 @@
+# The supplied pipeline for GRC-2: one task that runs the collector and keeps its output as a pipeline result.
+# The first step copies the oc program out of a public OpenShift tools image; the second runs the script in a public Python image.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: evidence-collect
+  namespace: build
+spec:
+  workspaces:
+    - name: script
+      readOnly: true
+  results:
+    - name: evidence
+      description: One line of JSON produced by the collector.
+  volumes:
+    - name: oc-bin
+      emptyDir: {}
+  steps:
+    - name: get-oc
+      image: quay.io/openshift/origin-cli:4.22.0
+      volumeMounts:
+        - name: oc-bin
+          mountPath: /oc-bin
+      script: |
+        #!/bin/sh
+        cp /usr/bin/oc /oc-bin/oc
+    - name: run
+      image: registry.access.redhat.com/ubi9/python-312:1
+      env:
+        - name: PATH
+          value: /oc-bin:/opt/app-root/bin:/usr/local/bin:/usr/bin:/bin
+      volumeMounts:
+        - name: oc-bin
+          mountPath: /oc-bin
+      script: |
+        #!/bin/sh
+        python3 $(workspaces.script.path)/collect_facts.py > $(results.evidence.path)
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: collect-evidence
+  namespace: build
+spec:
+  workspaces:
+    - name: script
+  tasks:
+    - name: collect
+      taskRef:
+        name: evidence-collect
+      workspaces:
+        - name: script
+          workspace: script
+  results:
+    - name: evidence
+      value: $(tasks.collect.results.evidence)

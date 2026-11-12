@@ -1,0 +1,49 @@
+# AID-2 sandbox project: one running pod and one config map that must survive the unsafe scripts.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-sandbox
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sandbox-evidence
+  namespace: ai-sandbox
+data:
+  note: "If this config map is gone, a script deleted it."
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sandbox-pod
+  namespace: ai-sandbox
+  labels:
+    app: sandbox-pod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sandbox-pod
+  template:
+    metadata:
+      labels:
+        app: sandbox-pod
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sandbox-pod
+          image: registry.access.redhat.com/ubi9/ubi-minimal:9.5
+          command: ["sleep", "infinity"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi

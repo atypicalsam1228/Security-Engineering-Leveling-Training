@@ -1,0 +1,14 @@
+{
+  "expr": "sum(count_over_time({log_type=\"audit\"} | json | objectRef_resource=\"pods\" | objectRef_subresource=\"exec\" | verb=\"create\" | user_username!~\"system:.*\" [5m]))",
+  "op": "gt",
+  "threshold": 0,
+  "severity": "high",
+  "control": "SI-4",
+  "uid": "det-pod-exec",
+  "title": "pod-exec",
+  "tests": [
+    {"sample": "pod-exec", "case": "exec-by-person", "expect": "fire"},
+    {"sample": "pod-exec", "case": "logs-by-person", "expect": "no_fire"},
+    {"sample": "pod-exec", "case": "exec-by-controller", "expect": "no_fire"}
+  ]
+}

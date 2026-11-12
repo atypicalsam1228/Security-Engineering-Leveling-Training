@@ -1,0 +1,113 @@
+# Identities and storage for GRC-3. evidence-runner reads the cluster for the scheduled collector.
+# gate-runner runs the review gate (it needs no cluster access). gate-trigger lets the EventListener start gate runs.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: evidence-runner
+  namespace: build
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gate-runner
+  namespace: build
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gate-trigger
+  namespace: build
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: evidence-reader
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["machineconfiguration.openshift.io"]
+    resources: ["machineconfigs"]
+    verbs: ["get", "list"]
+  - apiGroups: ["config.openshift.io"]
+    resources: ["apiservers"]
+    verbs: ["get", "list"]
+  - apiGroups: ["kyverno.io"]
+    resources: ["clusterpolicies", "policies"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: evidence-runner-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: evidence-reader
+subjects:
+  - kind: ServiceAccount
+    name: evidence-runner
+    namespace: build
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gate-trigger-run
+  namespace: build
+rules:
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelineruns", "taskruns"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gate-trigger-run
+  namespace: build
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: gate-trigger-run
+subjects:
+  - kind: ServiceAccount
+    name: gate-trigger
+    namespace: build
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gate-trigger-eventlistener
+  namespace: build
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tekton-triggers-eventlistener-roles
+subjects:
+  - kind: ServiceAccount
+    name: gate-trigger
+    namespace: build
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gate-trigger-eventlistener-cluster
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tekton-triggers-eventlistener-clusterroles
+subjects:
+  - kind: ServiceAccount
+    name: gate-trigger
+    namespace: build
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: evidence-pvc
+  namespace: build
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

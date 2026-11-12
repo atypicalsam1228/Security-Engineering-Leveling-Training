@@ -1,0 +1,24 @@
+# Enforce-mode policy: Pods in demo may not use the latest image tag. Kyverno generates the Deployment rule
+# from this Pod rule, so a dry run of a Deployment is refused too.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: grc-enforce-no-latest-tag
+spec:
+  background: true
+  rules:
+    - name: no-latest
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - demo
+      validate:
+        failureAction: Enforce
+        message: "The image tag latest is not allowed."
+        pattern:
+          spec:
+            containers:
+              - {image: "!*:latest"}

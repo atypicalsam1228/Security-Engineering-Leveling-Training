@@ -1,0 +1,78 @@
+# The review gate pipeline. Both tasks run in the public image registry.access.redhat.com/ubi9/python-312:1 (python3 and curl). The check task reads the script at one commit and runs the gate on its text.
+# The report task always runs (finally) and posts the result to Gitea as the commit status evidence-review-gate.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: evidence-gate-check
+  namespace: build
+spec:
+  params:
+    - name: sha
+  workspaces:
+    - name: gate
+      readOnly: true
+  steps:
+    - name: check
+      image: registry.access.redhat.com/ubi9/python-312:1
+      envFrom:
+        - configMapRef:
+            name: evidence-source
+        - secretRef:
+            name: gitea-api
+      script: |
+        #!/bin/sh
+        curl -sf -H "Authorization: token $GITEA_TOKEN" "$GITEA_URL/api/v1/repos/$GITEA_USER/evidence-scripts/raw/collect_evidence.py?ref=$(params.sha)" -o /tmp/collect_evidence.py || { echo "FAIL read: collect_evidence.py is missing at this commit"; exit 1; }
+        python3 $(workspaces.gate.path)/review-gate.py /tmp/collect_evidence.py
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: evidence-gate-report
+  namespace: build
+spec:
+  params:
+    - name: sha
+    - name: outcome
+  steps:
+    - name: post-status
+      image: registry.access.redhat.com/ubi9/python-312:1
+      envFrom:
+        - configMapRef:
+            name: evidence-source
+        - secretRef:
+            name: gitea-api
+      script: |
+        #!/bin/sh
+        STATE=failure
+        test "$(params.outcome)" = Succeeded && STATE=success
+        curl -s -o /dev/null -w "status posted: %{http_code}\n" -X POST -H "Authorization: token $GITEA_TOKEN" -H "Content-Type: application/json" "$GITEA_URL/api/v1/repos/$GITEA_USER/evidence-scripts/statuses/$(params.sha)" -d "{\"state\":\"$STATE\",\"context\":\"evidence-review-gate\",\"description\":\"Automated review of collect_evidence.py\"}"
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: review-gate
+  namespace: build
+spec:
+  params:
+    - name: sha
+  workspaces:
+    - name: gate
+  tasks:
+    - name: check
+      taskRef:
+        name: evidence-gate-check
+      params:
+        - name: sha
+          value: $(params.sha)
+      workspaces:
+        - name: gate
+          workspace: gate
+  finally:
+    - name: report
+      taskRef:
+        name: evidence-gate-report
+      params:
+        - name: sha
+          value: $(params.sha)
+        - name: outcome
+          value: $(tasks.check.status)

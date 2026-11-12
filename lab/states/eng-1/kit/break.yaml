@@ -1,0 +1,23 @@
+# Step 4 applies this file. It makes two mistakes on purpose:
+# 1. The allow rule names pods labeled app=frontend, but the caller is labeled app=client, so traffic to web is dropped.
+# 2. The Service sends traffic to port 8081, but web listens on 8080, so once the first mistake is fixed the connection is refused.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny-ingress, namespace: net-lab}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: allow-client, namespace: net-lab}
+spec:
+  podSelector: {matchLabels: {app: web}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: frontend}}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: web, namespace: net-lab}
+spec: {selector: {app: web}, ports: [{port: 8080, targetPort: 8081}]}

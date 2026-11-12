@@ -1,0 +1,22 @@
+// Intake for test events and the writer to Loki. SDR-4 keeps your labeling stage in label.alloy.
+loki.source.api "intake" {
+  http {
+    listen_address = "0.0.0.0"
+    listen_port    = 3500
+  }
+  use_incoming_timestamp = true
+  forward_to             = [loki.process.label.receiver]
+}
+
+loki.write "siem" {
+  endpoint {
+    url = sys.env("LOKI_URL") + "/loki/api/v1/push"
+    basic_auth {
+      username = sys.env("LOKI_USER")
+      password = sys.env("LOKI_PASSWORD")
+    }
+    tls_config {
+      ca_file = "/etc/loki-ca/ca.crt"
+    }
+  }
+}

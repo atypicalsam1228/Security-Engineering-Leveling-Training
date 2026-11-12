@@ -1,0 +1,21 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: agent-guardrails-cluster
+spec:
+  background: false
+  rules:
+    - name: no-cluster-wide-binding
+      match:
+        any:
+          - resources:
+              kinds: ["ClusterRoleBinding"]
+      validate:
+        failureAction: Enforce
+        message: "The agent-runner identity must not be bound cluster-wide."
+        deny:
+          conditions:
+            any:
+              - key: "{{ request.object.subjects[?name=='agent-runner'] || `[]` | length(@) }}"
+                operator: GreaterThan
+                value: 0

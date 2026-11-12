@@ -1,0 +1,37 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: evidence-policy
+  namespace: build
+spec:
+  params:
+    - name: manifest
+  workspaces:
+    - name: candidate
+      readOnly: true
+    - name: evidence
+  volumes:
+    - name: oc-bin
+      emptyDir: {}
+    - name: admit-script
+      configMap:
+        name: admit-script
+  steps:
+    - name: get-oc
+      image: quay.io/openshift/origin-cli:4.22.0
+      volumeMounts:
+        - {name: oc-bin, mountPath: /oc-bin}
+      script: |
+        #!/bin/sh
+        cp /usr/bin/oc /oc-bin/oc
+    - name: admit
+      image: registry.access.redhat.com/ubi9/python-312:1
+      env:
+        - {name: PATH, value: "/oc-bin:/opt/app-root/bin:/usr/bin:/bin"}
+        - {name: MANIFEST, value: "$(params.manifest)"}
+        - {name: CANDIDATE, value: "$(workspaces.candidate.path)"}
+        - {name: EVIDENCE, value: "$(workspaces.evidence.path)"}
+      volumeMounts:
+        - {name: oc-bin, mountPath: /oc-bin}
+        - {name: admit-script, mountPath: /admit}
+      command: ["python3", "/admit/admit.py"]

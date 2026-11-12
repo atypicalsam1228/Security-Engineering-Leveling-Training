@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vm-lab
+  labels:
+    criticality: high
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vm-internal
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vm-batch

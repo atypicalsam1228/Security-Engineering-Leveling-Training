@@ -1,0 +1,167 @@
+# Generated from SUPPLIED in generators/content/iac_1.py. Regenerate when that text changes.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: iac-supplied
+  namespace: build
+  labels:
+    lab-module: iac-1
+data:
+  versions.tf: |
+    terraform {
+      required_version = ">= 1.11"
+
+      required_providers {
+        kubernetes = {
+          source  = "hashicorp/kubernetes"
+          version = "3.4.0"
+        }
+      }
+    }
+
+    provider "kubernetes" {
+      config_path = "/workspace/.lab/kubeconfig"
+
+      ignore_annotations = ["openshift[.]io/.*", "security[.]openshift[.]io/.*"]
+      ignore_labels      = ["pod-security[.]kubernetes[.]io/.*", "security[.]openshift[.]io/.*", "openshift-pipelines[.]tekton[.]dev/.*"]
+    }
+  variables.tf: |
+    variable "namespace" {
+      type    = string
+      default = "iac-lab"
+    }
+
+    variable "pod_limit" {
+      type    = string
+      default = "10"
+    }
+
+    variable "enable_default_deny" {
+      type    = bool
+      default = true
+    }
+  main.tf: |
+    resource "kubernetes_namespace_v1" "lab" {
+      metadata {
+        name = var.namespace
+      }
+    }
+
+    resource "kubernetes_resource_quota_v1" "limits" {
+      metadata {
+        name      = "baseline-quota"
+        namespace = kubernetes_namespace_v1.lab.metadata[0].name
+      }
+
+      spec {
+        hard = {
+          pods = var.pod_limit
+        }
+      }
+    }
+
+    resource "kubernetes_network_policy_v1" "default_deny" {
+      count = var.enable_default_deny ? 1 : 0
+
+      metadata {
+        name      = "default-deny"
+        namespace = kubernetes_namespace_v1.lab.metadata[0].name
+      }
+
+      spec {
+        pod_selector {}
+        policy_types = ["Ingress", "Egress"]
+      }
+    }
+
+    resource "kubernetes_role_v1" "reader" {
+      metadata {
+        name      = "config-reader"
+        namespace = kubernetes_namespace_v1.lab.metadata[0].name
+      }
+
+      rule {
+        api_groups = [""]
+        resources  = ["configmaps"]
+        verbs      = ["get", "list"]
+      }
+    }
+
+    resource "kubernetes_role_binding_v1" "reader" {
+      metadata {
+        name      = "config-reader-binding"
+        namespace = kubernetes_namespace_v1.lab.metadata[0].name
+      }
+
+      role_ref {
+        api_group = "rbac.authorization.k8s.io"
+        kind      = "Role"
+        name      = kubernetes_role_v1.reader.metadata[0].name
+      }
+
+      subject {
+        kind      = "ServiceAccount"
+        name      = "report-reader"
+        namespace = kubernetes_namespace_v1.lab.metadata[0].name
+      }
+    }
+  risky.tfvars: |
+    # A supplied change request for the baseline.
+    enable_default_deny = false
+  broken-main.tf.txt: |
+    resource "kubernetes_namespace_v1" "lab" {
+      metadata {
+        nmae = var.namespace
+      }
+    }
+  baseline.yml: |
+    ---
+    - name: Add the service account and the settings record to iac-lab
+      hosts: localhost
+      connection: local
+      gather_facts: false
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+        target_ns: iac-lab
+      module_defaults:
+        kubernetes.core.k8s:
+          kubeconfig: /workspace/.lab/kubeconfig
+      tasks:
+        - name: Service account report-reader exists
+          kubernetes.core.k8s:
+            state: present
+            definition:
+              apiVersion: v1
+              kind: ServiceAccount
+              metadata:
+                name: report-reader
+                namespace: "{{ target_ns }}"
+
+        - name: Settings record exists
+          kubernetes.core.k8s:
+            state: present
+            definition:
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: settings-record
+                namespace: "{{ target_ns }}"
+              data:
+                baseline: iac-1
+  summary.sh: |
+    #!/usr/bin/env bash
+    # One line per tool: does the cluster match the files? Reads only and changes nothing.
+    cd /workspace/iac-1/baseline || exit 1
+    terraform plan -input=false -detailed-exitcode > /dev/null 2>&1
+    tf=$?
+    tfmsg="terraform: the cluster matches the files (exit code 0)"
+    if test "$tf" -eq 2; then
+      tfmsg="terraform: the cluster differs from the files (exit code 2)"
+    fi
+    if test "$tf" -eq 1; then
+      tfmsg="terraform: could not check (exit code 1)"
+    fi
+    echo "$tfmsg"
+    cd /workspace/iac-1 || exit 1
+    changed=$(ansible-playbook -i localhost, baseline.yml --check | grep -E "^localhost" | sed -E "s/.*changed=([0-9]+).*/\1/")
+    echo "ansible: ${changed:-unknown} change(s) the playbook would make"

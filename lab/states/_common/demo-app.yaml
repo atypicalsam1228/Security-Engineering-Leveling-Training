@@ -1,0 +1,51 @@
+# The sample workload used by several modules.
+# Applied only when demo-app does not exist yet (see ensure_demo_app in lib.sh), so a later
+# module never overwrites what an earlier module left behind.
+# Fixed version tag (not latest), non-root, no privilege escalation: it passes the lab Kyverno policies.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: demo-app
+  namespace: demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+  namespace: demo
+  labels:
+    app: demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-app
+  template:
+    metadata:
+      labels:
+        app: demo-app
+    spec:
+      serviceAccountName: demo-app
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: demo-app
+          image: registry.access.redhat.com/ubi9/ubi-minimal:9.5
+          command: ["sleep", "infinity"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi

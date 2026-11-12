@@ -1,0 +1,5 @@
+component	version	where verified	date
+Loki	3.7.9 (docker.io/grafana/loki:3.7.9)	github.com/grafana/loki releases latest tag v3.7.9 (2026-10-20); hub.docker.com/v2/repositories/grafana/loki/tags/3.7.9 exists	2026-11-02
+Grafana OSS	13.2.4 (docker.io/grafana/grafana:13.2.4)	LAB-CONTRACT.md pin; hub.docker.com/v2/repositories/grafana/grafana/tags/13.2.4 exists (updated 2026-10-13); 13.3.0 is newer and not used	2026-11-02
+Alloy	v1.21.3 (docker.io/grafana/alloy:v1.21.3)	github.com/grafana/alloy releases latest tag v1.21.3 (2026-10-28); hub.docker.com tag v1.21.3 exists	2026-11-02
+nginx gateway	registry.access.redhat.com/ubi9/nginx-126:1-1777855212	registry.access.redhat.com/v2/ubi9/nginx-126/manifests/1-1777855212 returned HTTP 200	2026-11-02

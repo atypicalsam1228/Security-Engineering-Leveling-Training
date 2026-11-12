@@ -1,0 +1,78 @@
+# Sample workloads for the GRC-2 Step 5 exercise (count pods that do not enforce non-root).
+# Own namespace so other modules that scan demo are not affected. Both pods use a fixed image tag and
+# pass the lab Kyverno policy. payments-api sets runAsNonRoot; legacy-batch does not, which is the finding.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grc2-workloads
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-api
+  namespace: grc2-workloads
+  labels:
+    app: payments-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payments-api
+  template:
+    metadata:
+      labels:
+        app: payments-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: payments-api
+          image: registry.access.redhat.com/ubi9/ubi-minimal:9.5
+          command: ["sleep", "infinity"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legacy-batch
+  namespace: grc2-workloads
+  labels:
+    app: legacy-batch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: legacy-batch
+  template:
+    metadata:
+      labels:
+        app: legacy-batch
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: legacy-batch
+          image: registry.access.redhat.com/ubi9/ubi-minimal:9.5
+          command: ["sleep", "infinity"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi

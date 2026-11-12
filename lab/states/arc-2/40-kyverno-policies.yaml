@@ -1,0 +1,47 @@
+# ARC-2 start state: one policy that refuses (Enforce) and one that only records (Audit), both scoped to arc-lab.
+# Kyverno 1.19.2 ClusterPolicy (kyverno.io/v1). The autogen annotation keeps the rules on Pods only.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: arc-require-nonroot
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+spec:
+  background: true
+  rules:
+    - name: run-as-non-root
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [arc-lab]
+      validate:
+        failureAction: Enforce
+        message: "Pods in arc-lab must set runAsNonRoot to true."
+        pattern:
+          spec:
+            securityContext:
+              runAsNonRoot: "true"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: arc-disallow-latest
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+spec:
+  background: true
+  rules:
+    - name: no-latest-tag
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [arc-lab]
+      validate:
+        failureAction: Audit
+        message: "The latest image tag is not allowed in arc-lab."
+        pattern:
+          spec:
+            containers:
+              - {image: "!*:latest"}

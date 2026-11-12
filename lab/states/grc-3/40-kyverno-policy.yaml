@@ -1,0 +1,25 @@
+# One Audit-mode policy so the collector's policy count is not zero. Audit mode reports and never blocks.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: grc-no-latest-tag
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+spec:
+  background: true
+  rules:
+    - name: no-latest
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - demo
+      validate:
+        failureAction: Audit
+        message: "The image tag latest is not allowed."
+        pattern:
+          spec:
+            containers:
+              - {image: "!*:latest"}

@@ -1,0 +1,11 @@
+component	version	where verified	date
+Kyverno	chart kyverno/kyverno 3.9.2, app v1.19.2 (reg.kyverno.io/kyverno/kyverno:v1.19.2)	kyverno.github.io/kyverno/index.yaml lists 3.9.2/v1.19.2; chart rendered with helm template (alpine/helm 3.19.0); LAB-CONTRACT.md pin	2026-11-02
+Trivy Operator	chart aquasecurity/trivy-operator 0.38.1, app 0.36.1 (mirror.gcr.io/aquasec/trivy-operator:0.36.1)	aquasecurity.github.io/helm-charts/index.yaml (newest chart); mirror.gcr.io/v2/aquasec/trivy-operator/manifests/0.36.1 HTTP 200	2026-11-02
+Trivy scanner (in operator chart)	0.76.1 (mirror.gcr.io/aquasec/trivy:0.76.1)	chart 0.38.1 values.yaml default; registry manifest HTTP 200; equals the Trivy pin in tool-reference/03	2026-11-02
+Trivy checks bundle	mirror.gcr.io/aquasec/trivy-checks:1	chart default; manifest HTTP 200	2026-11-02
+Falco	chart falcosecurity/falco 9.2.1, app 0.45.1 (docker.io/falcosecurity/falco:0.45.1)	falcosecurity.github.io/charts/index.yaml (9.2.1 -> 0.45.1; 9.2.2 -> 0.45.2 not used); Docker Hub manifest 0.45.1 HTTP 200; LAB-CONTRACT.md pin	2026-11-02
+falcoctl	0.14.2	chart 9.2.1 default; Docker Hub manifest HTTP 200	2026-11-02
+Falco container plugin / rules	ghcr.io/falcosecurity/plugins/plugin/container:0.7.5; ghcr.io/falcosecurity/rules/falco-rules:5	chart 9.2.1 defaults; ghcr.io manifests HTTP 200	2026-11-02
+OpenShift Pipelines operator	package openshift-pipelines-operator-rh, channel latest	Red Hat OpenShift Pipelines 1.20 install docs (tool-reference/03); channel presence checked against the cluster catalog at run time	2026-11-02
+OpenShift GitOps operator	package openshift-gitops-operator, channel latest, ns openshift-gitops-operator	docs.redhat.com OpenShift GitOps 1.17 "Installing GitOps" (Subscription, OperatorGroup upgradeStrategy Default); channel checked at run time	2026-11-02
+OpenShift Logging operator	package cluster-logging, catalog default channel (not pinned)	cannot be verified without the cluster catalog; default channel read at run time	2026-11-02

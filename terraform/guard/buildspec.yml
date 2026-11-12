@@ -1,0 +1,103 @@
+version: 0.2
+# Runs one of ACTION=pause|resume|destroy for one LAB_ID (both set by the guard
+# Lambda). Nothing here has run on AWS.
+env:
+  shell: bash
+phases:
+  install:
+    commands:
+      # Terraform is pinned; the sha256 is from the HashiCorp SHA256SUMS file for 1.14.8 linux_amd64.
+      - |
+        set -euo pipefail
+        TF_VERSION=1.14.8
+        TF_SHA256=56a5d12f47cbc1c6bedb8f5426ae7d5df984d1929572c24b56f4c82e9f9bf709
+        curl -fsSL -o /tmp/terraform.zip "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip"
+        echo "${TF_SHA256}  /tmp/terraform.zip" | sha256sum -c -
+        unzip -q -o /tmp/terraform.zip -d /usr/local/bin
+        terraform version
+  build:
+    commands:
+      - |
+        set -euo pipefail
+        export AWS_REGION="$GUARD_REGION" AWS_DEFAULT_REGION="$GUARD_REGION"
+
+        # ---- validate inputs and account
+        case "$ACTION" in pause|resume|destroy) ;; *) echo "bad ACTION" >&2; exit 2 ;; esac
+        [[ "$LAB_ID" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || { echo "bad LAB_ID" >&2; exit 2; }
+        ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+        [ "$ACCOUNT_ID" = "$EXPECTED_ACCOUNT_ID" ] || { echo "wrong account" >&2; exit 2; }
+
+        # ---- fetch code and registration
+        mkdir -p /tmp/code /tmp/reg
+        aws s3 cp "s3://$GUARD_BUCKET/code/terraform.zip" /tmp/code.zip --only-show-errors
+        unzip -q -o /tmp/code.zip -d /tmp/code
+        aws s3 cp "s3://$GUARD_BUCKET/labs/$LAB_ID/registration.json" /tmp/reg/registration.json --only-show-errors
+        REG=/tmp/reg/registration.json
+        jq -e --arg id "$LAB_ID" '.lab_id == $id and (.region|type == "string") and (.state_bucket|type == "string")
+          and (.state_key|type == "string") and (.state_kms_key_arn|type == "string")' "$REG" >/dev/null
+        [ "$(jq -r .region "$REG")" = "$GUARD_REGION" ] || { echo "registration region differs" >&2; exit 2; }
+
+        # ---- init with the registered backend; tf_vars become an auto-loaded var file
+        cd /tmp/code
+        jq --arg gb "$GUARD_BUCKET" \
+          '{lab_id, region, destroy_after, alert_email, guard_bucket: $gb} + (.tf_vars // {})' "$REG" > lab.auto.tfvars.json
+        terraform init -input=false -reconfigure \
+          -backend-config="bucket=$(jq -r .state_bucket "$REG")" \
+          -backend-config="key=$(jq -r .state_key "$REG")" \
+          -backend-config="region=$(jq -r .region "$REG")" \
+          -backend-config="kms_key_id=$(jq -r .state_kms_key_arn "$REG")"
+
+        # Cluster instances: tag LabId, not the bastion (Role=openshift-install-fips).
+        cluster_ids() {
+          aws ec2 describe-instances --filters "Name=tag:LabId,Values=$LAB_ID" "Name=instance-state-name,Values=$1" --output json |
+            jq -r '.Reservations[].Instances[]
+              | select((.Tags // []) | map(select(.Key == "Role" and .Value == "openshift-install-fips")) | length == 0)
+              | .InstanceId'
+        }
+        bastion_exists() {
+          [ -n "$(aws ec2 describe-instances \
+            --filters "Name=tag:LabId,Values=$LAB_ID" "Name=tag:Role,Values=openshift-install-fips" \
+                      "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[].Instances[].InstanceId' --output text)" ]
+        }
+
+        case "$ACTION" in
+          pause)
+            ids="$(cluster_ids running,pending)"
+            if [ -n "$ids" ]; then
+              # shellcheck disable=SC2086
+              aws ec2 stop-instances --instance-ids $ids >/dev/null
+              # shellcheck disable=SC2086
+              aws ec2 wait instance-stopped --instance-ids $ids
+            fi
+            terraform apply -input=false -auto-approve -var paused=true
+            ;;
+          resume)
+            terraform apply -input=false -auto-approve -var paused=false
+            ids="$(cluster_ids stopped,stopping)"
+            if [ -n "$ids" ]; then
+              # shellcheck disable=SC2086
+              aws ec2 start-instances --instance-ids $ids >/dev/null
+            fi
+            ids="$(cluster_ids pending,running)"
+            if [ -n "$ids" ]; then
+              # shellcheck disable=SC2086
+              aws ec2 wait instance-running --instance-ids $ids
+              # shellcheck disable=SC2086
+              aws ec2 wait instance-status-ok --instance-ids $ids
+            fi
+            ;;
+          destroy)
+            # A paused lab has no bastion: recreate it first, the installer destroy runs from it.
+            if ! bastion_exists; then
+              terraform apply -input=false -auto-approve -var paused=false
+            fi
+            export SWEEP_ACCOUNT_ID="$ACCOUNT_ID"
+            bash scripts/sweep.sh --apply --force --lab "$LAB_ID"
+            remaining="$(terraform state list | wc -l)"
+            [ "$remaining" -eq 0 ] || { echo "destroy incomplete: $remaining resources remain in state" >&2; exit 1; }
+            NOW="$(date -u +%Y-%m-%dT%H:%M:%S+00:00)"
+            printf '{"status":"destroyed","since":"%s","paused_at":null,"last_notice":null,"last_error":null,"last_run":"%s"}' "$NOW" "$NOW" |
+              aws s3 cp - "s3://$GUARD_BUCKET/state/$LAB_ID.json" --only-show-errors
+            ;;
+        esac

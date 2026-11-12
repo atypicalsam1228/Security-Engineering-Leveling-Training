@@ -1,0 +1,60 @@
+# The supplied collector for GRC-2. The same text is shown in the module (generators/content/grc_2.py).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evidence-collector
+  namespace: build
+data:
+  collect_facts.py: |
+    import json
+    import subprocess
+    from datetime import datetime, timezone
+
+    REQUIRED_NAMESPACES = ["demo", "build", "kyverno"]
+
+
+    def oc_json(*args):
+        run = subprocess.run(["oc", *args, "-o", "json"], capture_output=True, text=True)
+        if run.returncode != 0:
+            raise RuntimeError(run.stderr.strip()[:300] or "oc failed")
+        return json.loads(run.stdout)
+
+
+    def fips_configured():
+        items = oc_json("get", "machineconfigs")["items"]
+        rendered = [i for i in items if i["metadata"]["name"].startswith("rendered-master-")]
+        newest = max(rendered, key=lambda i: i["metadata"]["creationTimestamp"])
+        return {"machineconfig": newest["metadata"]["name"], "fips": newest["spec"].get("fips") is True}
+
+
+    def required_namespaces():
+        names = {i["metadata"]["name"] for i in oc_json("get", "namespaces")["items"]}
+        return {"required": len(REQUIRED_NAMESPACES), "missing": [n for n in REQUIRED_NAMESPACES if n not in names]}
+
+
+    def kyverno_policies():
+        items = oc_json("get", "clusterpolicies.kyverno.io")["items"]
+        ready = [i for i in items if any(c.get("type") == "Ready" and c.get("status") == "True" for c in i.get("status", {}).get("conditions", []))]
+        return {"total": len(items), "ready": len(ready)}
+
+
+    def audit_profile():
+        return oc_json("get", "apiservers.config.openshift.io", "cluster")["spec"].get("audit", {}).get("profile", "Default")
+
+
+    CHECKS = [
+        ("fips-configured", "SC-13", fips_configured),
+        ("required-namespaces", "CM-8", required_namespaces),
+        ("kyverno-policies", "CM-6", kyverno_policies),
+        ("audit-profile", "AU-12", audit_profile),
+    ]
+
+    checks, errors = [], []
+    for check_id, control, collect in CHECKS:
+        try:
+            checks.append({"id": check_id, "control": control, "status": "collected", "value": collect()})
+        except Exception as problem:
+            checks.append({"id": check_id, "control": control, "status": "error", "value": None})
+            errors.append({"id": check_id, "error": str(problem)[:300]})
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    print(json.dumps({"schema": "evidence-v1", "collected_at": stamp, "complete": not errors, "checks": checks, "errors": errors}, separators=(",", ":")))

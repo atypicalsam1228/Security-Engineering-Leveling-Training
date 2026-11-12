@@ -1,0 +1,70 @@
+# Three Audit-mode policies for namespace demo. Audit never blocks; Kyverno records results in PolicyReports.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: grc-no-latest-tag
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+spec:
+  background: true
+  rules:
+    - name: no-latest
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [demo]
+      validate:
+        failureAction: Audit
+        message: "The image tag latest is not allowed."
+        pattern:
+          spec:
+            containers:
+              - {image: "!*:latest"}
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: grc-no-privileged
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+spec:
+  background: true
+  rules:
+    - name: no-privileged
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [demo]
+      validate:
+        failureAction: Audit
+        message: "Privileged containers are not allowed."
+        pattern:
+          spec:
+            containers:
+              - =(securityContext):
+                  =(privileged): "false"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: grc-require-owner-label
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+spec:
+  background: true
+  rules:
+    - name: owner-label
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [demo]
+      validate:
+        failureAction: Audit
+        message: "Pods need an owner label."
+        pattern:
+          metadata:
+            labels:
+              owner: "?*"

@@ -1,0 +1,80 @@
+# The plan gate pipeline (IAC-2). The check task reads gate.py from main and plan.json at one commit, and runs the gate.
+# The report task always runs (finally) and posts the result to Gitea as the commit status iac-plan-gate.
+# Terraform is not in the cluster: the gate reads the plan.json artifact that the learner generated and committed.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: iac-plan-check
+  namespace: build
+spec:
+  params:
+    - name: sha
+    - name: tools-image
+  steps:
+    - name: check
+      image: $(params.tools-image)
+      envFrom:
+        - configMapRef:
+            name: iac-source
+        - secretRef:
+            name: iac-gitea-api
+      script: |
+        #!/bin/sh
+        RAW="$GITEA_URL/api/v1/repos/$GITEA_USER/iac-baseline/raw"
+        curl -sf -H "Authorization: token $GITEA_TOKEN" "$RAW/gate.py?ref=main" -o /tmp/gate.py || { echo "FAIL read: gate.py is missing on main"; exit 1; }
+        curl -sf -H "Authorization: token $GITEA_TOKEN" "$RAW/plan.json?ref=$(params.sha)" -o /tmp/plan.json || { echo "FAIL read: plan.json is missing at this commit"; exit 1; }
+        python3 /tmp/gate.py < /tmp/plan.json
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: iac-plan-report
+  namespace: build
+spec:
+  params:
+    - name: sha
+    - name: outcome
+    - name: tools-image
+  steps:
+    - name: post-status
+      image: $(params.tools-image)
+      envFrom:
+        - configMapRef:
+            name: iac-source
+        - secretRef:
+            name: iac-gitea-api
+      script: |
+        #!/bin/sh
+        STATE=failure
+        test "$(params.outcome)" = Succeeded && STATE=success
+        curl -s -o /dev/null -w "status posted: %{http_code}\n" -X POST -H "Authorization: token $GITEA_TOKEN" -H "Content-Type: application/json" "$GITEA_URL/api/v1/repos/$GITEA_USER/iac-baseline/statuses/$(params.sha)" -d "{\"state\":\"$STATE\",\"context\":\"iac-plan-gate\",\"description\":\"Automated review of plan.json\"}"
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: iac-plan-gate
+  namespace: build
+spec:
+  params:
+    - name: sha
+    - name: tools-image
+  tasks:
+    - name: check
+      taskRef:
+        name: iac-plan-check
+      params:
+        - name: sha
+          value: $(params.sha)
+        - name: tools-image
+          value: $(params.tools-image)
+  finally:
+    - name: report
+      taskRef:
+        name: iac-plan-report
+      params:
+        - name: sha
+          value: $(params.sha)
+        - name: outcome
+          value: $(tasks.check.status)
+        - name: tools-image
+          value: $(params.tools-image)

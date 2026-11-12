@@ -1,0 +1,8 @@
+{
+  "privilege": [
+    {"actor": "lab-admin1", "namespace": "demo", "name": "ops-view-temp", "role": "view", "subject": "lab-analyst"}
+  ],
+  "shell": [
+    {"actor": "lab-oncall", "namespace": "demo"}
+  ]
+}

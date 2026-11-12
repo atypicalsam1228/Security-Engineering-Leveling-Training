@@ -1,0 +1,69 @@
+# Two service accounts for the collector pipeline. evidence-runner can read what the collector asks for.
+# evidence-limited can read only namespaces and Kyverno policies, so a run as that account is incomplete on purpose.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: evidence-runner
+  namespace: build
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: evidence-limited
+  namespace: build
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: evidence-reader
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: ["machineconfiguration.openshift.io"]
+    resources: ["machineconfigs"]
+    verbs: ["get", "list"]
+  - apiGroups: ["config.openshift.io"]
+    resources: ["apiservers"]
+    verbs: ["get", "list"]
+  - apiGroups: ["kyverno.io"]
+    resources: ["clusterpolicies"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: evidence-reader-basic
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: ["kyverno.io"]
+    resources: ["clusterpolicies"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: evidence-runner-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: evidence-reader
+subjects:
+  - kind: ServiceAccount
+    name: evidence-runner
+    namespace: build
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: evidence-limited-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: evidence-reader-basic
+subjects:
+  - kind: ServiceAccount
+    name: evidence-limited
+    namespace: build

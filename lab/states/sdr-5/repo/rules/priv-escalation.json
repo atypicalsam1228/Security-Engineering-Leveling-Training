@@ -1,0 +1,36 @@
+{
+  "expr": "sum(count_over_time({log_type=\"audit\"} | json | objectRef_resource=~\"rolebindings|clusterrolebindings\" | verb=~\"create|patch|update\" | user_username!~\"system:.*\" | requestObject_roleRef_name=~\"admin|cluster-admin\" [5m]))",
+  "op": "gt",
+  "threshold": 0,
+  "severity": "high",
+  "control": "SI-4",
+  "uid": "det-priv-escalation",
+  "title": "priv-escalation",
+  "tests": [
+    {
+      "sample": "priv-escalation",
+      "case": "priv-cluster-admin",
+      "expect": "fire"
+    },
+    {
+      "sample": "priv-escalation",
+      "case": "priv-namespace-admin",
+      "expect": "fire"
+    },
+    {
+      "sample": "priv-escalation",
+      "case": "priv-view-only",
+      "expect": "no_fire"
+    },
+    {
+      "sample": "priv-escalation",
+      "case": "priv-by-controller",
+      "expect": "no_fire"
+    },
+    {
+      "sample": "priv-escalation",
+      "case": "priv-read-only",
+      "expect": "no_fire"
+    }
+  ]
+}
